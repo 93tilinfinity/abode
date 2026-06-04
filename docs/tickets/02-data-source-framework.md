@@ -2,6 +2,10 @@
 
 **Depends on:** Ticket 1 (rules name the fields and sources this framework supplies).
 
+> **Worked plan:** [`plans/ticket-02-data-source-framework.md`](../plans/ticket-02-data-source-framework.md)
+> — interface design, derived ordering, and the captured decisions (fail loudly,
+> no cross-run cache, log spend, subtle provenance).
+
 ## Goal
 
 Make every data source the same kind of pluggable component, and build the
