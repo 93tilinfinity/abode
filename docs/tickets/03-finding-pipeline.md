@@ -20,13 +20,22 @@ Deliver the four sources:
 2. **Paid API property search (one feed, broad).** Search properties inside the
    catchment using every constraint the paid API supports directly (price, beds,
    baths) and request every other useful field in the same call (floor area, EPC,
-   tenure, type, coordinates, photos, agent, commute time). One paid breadth
-   call; most attributes populated from this single feed.
+   tenure, type, coordinates, photos, agent). One paid breadth call; most
+   attributes populated from this single feed. (Commute time is **not** asked of
+   this feed — the listings API does not know the journey to the work anchor; it
+   comes from the journey source below.)
 3. **Secondary-source gap-fill (light, across candidates).** For fields the feed
    didn't provide — fibre/internet availability, outdoor space / park proximity,
    and similar — do light per-field lookups across the candidate set, each
-   cached. Recovered values are authoritative but flagged by source. Mark any
-   field that stays missing-and-unrecoverable so its gate fails closed.
+   cached. Recovered values are authoritative but flagged by source **and
+   sanity-checked** (a recovered value outside a plausible range is treated as
+   not recovered). Mark any field that stays missing-and-unrecoverable so its
+   gate fails closed. This step also includes a **per-property commute-time
+   lookup** against the journey/isochrone source: the catchment gate already
+   proved each candidate is inside the target time, but the page column and the
+   shortlist criterion need the actual minutes, so look them up here — one cached
+   call per candidate, light across the shrunk set — and populate `commute_time`
+   onto each property.
 4. **Area-data population for survivors (light).** For the surviving set, pull
    area-level data **by area** (e.g. crime stats for the safety requirement) and
    populate it onto each property in that area. v1 is a straight pull + threshold
@@ -57,11 +66,16 @@ scheduling are Ticket 4.
    source fills it where available, and that a property whose fibre stays
    unrecoverable **fails** the fibre gate rather than passing.
 5. **Provenance.** Assert a gap-filled field records its secondary source and is
-   still treated as authoritative by the rule.
-6. **Area threshold, not judgement.** Give two areas crime data either side of
+   still treated as authoritative by the rule. Assert a recovered value outside a
+   plausible range is rejected (treated as not recovered) rather than used.
+6. **Per-property commute time.** Assert every candidate gets a `commute_time`
+   from the journey source (not the listings feed), that the lookup runs on the
+   post-catchment candidate set (not the whole field), and that the populated
+   minutes are consumed by the page column and shortlist criterion.
+7. **Area threshold, not judgement.** Give two areas crime data either side of
    the safety threshold; assert every property in the breaching area fails and
    none in the safe area fails on that gate, with no model involved.
-7. **End-to-end set.** With a fixed mock dataset and a fixed config, assert the
+8. **End-to-end set.** With a fixed mock dataset and a fixed config, assert the
    pipeline returns exactly the properties that pass all gates — and that flipping
    one config threshold changes the matching set as expected (ties back to
    Ticket 1).

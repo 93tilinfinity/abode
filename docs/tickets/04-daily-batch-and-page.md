@@ -22,7 +22,9 @@ Deliver:
   time, postcode, link out**. Every column is **clickable to sort ascending or
   descending**, client-side. A sensible default order, but the system imposes no
   opinion beyond it — the couple reorder to suit. Public is acceptable because it
-  shows only already-public listing data.
+  shows only already-public listing data. Floor area is shown **as advertised**,
+  not as ground truth (per the SPEC's "honest about what it knows" principle) —
+  labelled so the couple don't read more certainty into it than the feed supports.
 - **Fail-loudly behaviour.** Any failure (pipeline error, empty/garbage feed,
   write failure) surfaces visibly — a non-zero exit and a surfaced error — rather
   than overwriting yesterday's good page with a blank one. Distinguish "ran, zero
