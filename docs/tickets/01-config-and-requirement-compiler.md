@@ -1,0 +1,58 @@
+# Ticket 1 — Config & requirement compiler
+
+**Depends on:** nothing. This is the foundation every other ticket reads from.
+
+## Goal
+
+Make the config file the single source of truth for the couple's must-haves and
+settings, and build the compiler that turns each plain-language must-have into a
+checkable pass/fail rule bound to a data source. Changing what the couple want
+must mean editing config, never code.
+
+Concretely, deliver:
+
+- **One editable config file** holding the must-haves and all settings (work
+  anchor, commute target, price/beds/baths bounds, EPC floor, fibre requirement,
+  safety threshold, shortlist weights, etc.). Plain, human-editable format.
+- **A requirement model.** Each must-have declares: the field it checks, the
+  comparison (e.g. `>=`, `<=`, `within`, `is true`), the threshold, the kind
+  (`deterministic` or `judgement`), and which data source supplies the field.
+  The kind is a recorded, visible decision on the requirement itself.
+- **A compiler** that reads the config and produces, for each must-have, a
+  callable rule that takes a property record and returns `pass`, `fail`, or
+  `fail (no data)` — never a score or a maybe.
+- **Fail-closed semantics built in.** A rule whose field is absent and
+  unrecoverable returns `fail`, with the reason recorded ("checkable by no
+  data"). Nothing is ever satisfied by assumption.
+- **v1 guard:** every must-have must compile to `deterministic`. A must-have
+  declared `judgement` is accepted into config but the compiler refuses to build
+  it in v1 (it is a v2 capability) — and says so loudly rather than silently
+  passing or failing it.
+
+This ticket owns the *rules*, not the *data*: it produces rules that ask a data
+source for a field. Where that field comes from is Ticket 2's concern.
+
+## Out of scope
+
+- Fetching any real data (Tickets 2–3).
+- Any model judgement (v2).
+- Scoring or weighting — that is the shortlist stage (Ticket 5), which reads the
+  same config but is a separate path.
+
+## How to validate
+
+1. **Round-trip a config.** Load the sample config and assert every must-have
+   compiles to a rule with the declared field, comparison, threshold, kind, and
+   bound source.
+2. **Pass/fail correctness.** Feed hand-built property records through the
+   compiled rules and assert each gate returns the expected `pass`/`fail` for
+   values above, at, and below the threshold (boundary cases included).
+3. **Fail-closed.** Feed a record with a required field missing; assert the rule
+   returns `fail (no data)` with the recorded reason — never `pass`.
+4. **Config is the only knob.** Change a threshold in the config, recompile, and
+   assert the rule's behaviour changes with no code edit. Add a new must-have in
+   config and assert it appears as a compiled rule.
+5. **v1 judgement guard.** Put a `judgement` must-have in config and assert the
+   compiler rejects it loudly in v1 mode rather than treating it as met or unmet.
+6. **Visible kind.** Assert each compiled rule exposes its `deterministic`/
+   `judgement` kind so downstream stages and the page can show it.

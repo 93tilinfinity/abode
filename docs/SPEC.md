@@ -92,3 +92,15 @@ In scope (v1): UK for-sale property; the couple's must-haves as pass/fail gates,
 v2: a daily nudge email pointing to the page; a favourites layer for marking viewings; model judgement of property condition from photos; OCR recovery of missing bathroom count and square footage; model judgement of area questions; and these judgement criteria joining the shortlist comparison.
 
 Deferred, not designed out (the uniform-component structure leaves room without rework): change-tracking between days; maps; and messaging-app delivery.
+
+---
+
+## Implementation tickets
+
+The v1 build is broken into five tickets, ordered by dependency. Each has a clear goal and an explicit way to validate it.
+
+1. [Config & requirement compiler](tickets/01-config-and-requirement-compiler.md) — the single source of truth and the pass/fail gate engine.
+2. [Pluggable data-source framework](tickets/02-data-source-framework.md) — uniform components and cheap-to-expensive orchestration.
+3. [The finding pipeline](tickets/03-finding-pipeline.md) — catchment → paid search → gap-fill → area data, producing the daily matches.
+4. [Daily batch runner & static page](tickets/04-daily-batch-and-page.md) — unattended wake-work-exit and the sortable HTML page.
+5. [Shortlist comparison](tickets/05-shortlist-comparison.md) — explainable weighted scoring over measurable criteria.
