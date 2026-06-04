@@ -97,15 +97,10 @@ Deferred, not designed out (the uniform-component structure leaves room without 
 
 ## Implementation tickets
 
-The v1 build is broken into the tickets below. They are ordered to mirror the evaluation algorithm: foundations first (config, component framework), then the pipeline steps in their cost order, then the two delivery surfaces (page, shortlist).
+The v1 build is broken into five tickets, ordered by dependency. Each has a clear goal and an explicit way to validate it.
 
-| # | Ticket | Builds |
-|---|--------|--------|
-| [01](tickets/01-config-and-requirement-compiler.md) | Config & requirement compiler | The single source of truth and the rules it compiles into |
-| [02](tickets/02-data-source-component-framework.md) | Data-source component framework & pipeline orchestrator | The uniform pluggable-source contract and cost-ordered execution |
-| [03](tickets/03-catchment-builder.md) | Catchment / isochrone builder (Step 1) | The commute polygon and free local commute gate |
-| [04](tickets/04-paid-api-property-search.md) | Paid API property search source (Step 2) | The single broad paid feed |
-| [05](tickets/05-secondary-source-gap-fill.md) | Secondary-source gap-fill (Step 3) | Light field-reads that fill feed gaps, failing closed |
-| [06](tickets/06-area-data-population.md) | Area-data population source (Step 4) | Area-level data (e.g. crime) and the safety threshold |
-| [07](tickets/07-daily-batch-and-static-page.md) | Daily batch entrypoint & static sortable page | The wake-work-exit run and the delivered HTML page |
-| [08](tickets/08-shortlist-comparison.md) | Shortlist comparison stage | The on-demand explainable weighted score |
+1. [Config & requirement compiler](tickets/01-config-and-requirement-compiler.md) — the single source of truth and the pass/fail gate engine.
+2. [Pluggable data-source framework](tickets/02-data-source-framework.md) — uniform components and cheap-to-expensive orchestration.
+3. [The finding pipeline](tickets/03-finding-pipeline.md) — catchment → paid search → gap-fill → area data, producing the daily matches.
+4. [Daily batch runner & static page](tickets/04-daily-batch-and-page.md) — unattended wake-work-exit and the sortable HTML page.
+5. [Shortlist comparison](tickets/05-shortlist-comparison.md) — explainable weighted scoring over measurable criteria.

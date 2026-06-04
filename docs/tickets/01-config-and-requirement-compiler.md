@@ -1,29 +1,58 @@
-# Ticket 01 — Config & requirement compiler
+# Ticket 1 — Config & requirement compiler
+
+**Depends on:** nothing. This is the foundation every other ticket reads from.
 
 ## Goal
 
-Make config the only source of truth. Provide one editable config file where the couple declare their must-haves in plain language plus all settings (work anchor, commute budget, price/bed/bath bounds, EPC floor, thresholds, shortlist weights). Provide a compiler that turns each declared must-have into a checkable rule bound to a named data source, and that records, per requirement, whether it is **deterministic** or **judgement**.
+Make the config file the single source of truth for the couple's must-haves and
+settings, and build the compiler that turns each plain-language must-have into a
+checkable pass/fail rule bound to a data source. Changing what the couple want
+must mean editing config, never code.
 
-Changing what the couple want must mean editing config, never code.
+Concretely, deliver:
 
-## Scope
+- **One editable config file** holding the must-haves and all settings (work
+  anchor, commute target, price/beds/baths bounds, EPC floor, fibre requirement,
+  safety threshold, shortlist weights, etc.). Plain, human-editable format.
+- **A requirement model.** Each must-have declares: the field it checks, the
+  comparison (e.g. `>=`, `<=`, `within`, `is true`), the threshold, the kind
+  (`deterministic` or `judgement`), and which data source supplies the field.
+  The kind is a recorded, visible decision on the requirement itself.
+- **A compiler** that reads the config and produces, for each must-have, a
+  callable rule that takes a property record and returns `pass`, `fail`, or
+  `fail (no data)` — never a score or a maybe.
+- **Fail-closed semantics built in.** A rule whose field is absent and
+  unrecoverable returns `fail`, with the reason recorded ("checkable by no
+  data"). Nothing is ever satisfied by assumption.
+- **v1 guard:** every must-have must compile to `deterministic`. A must-have
+  declared `judgement` is accepted into config but the compiler refuses to build
+  it in v1 (it is a v2 capability) — and says so loudly rather than silently
+  passing or failing it.
 
-- A single config file (e.g. `config.yaml` / `config.toml`) holding: work anchor + commute budget, the must-haves (price, bedrooms, bathrooms, EPC, fibre, commute-boundary, safety threshold), and shortlist weights. No requirement values live in code.
-- A loader that validates the file on read and **fails loudly** with a precise message on a malformed or incomplete config — never silently defaults a missing must-have into "satisfied".
-- A compiler that produces, per must-have, a rule object carrying: the field it reads, the comparison/operator, the bound value, the **kind** (`deterministic` | `judgement`), and the name of the data source that supplies its field.
-- The kind classification is an explicit, recorded, inspectable property of each rule — not inferred at evaluation time.
-- A rule evaluates a single property's populated fields to `pass` / `fail`, and **fails closed**: a field that is missing or unrecoverable evaluates to `fail`, never `pass`.
-- In v1 the compiler accepts judgement-kind requirements only insofar as the spec defines their v1 handling (area questions → area-data threshold in Ticket 06; condition → out of scope, left to the couple). No model judgement is compiled.
+This ticket owns the *rules*, not the *data*: it produces rules that ask a data
+source for a field. Where that field comes from is Ticket 2's concern.
 
 ## Out of scope
 
-- Actually fetching any data (that's the source tickets).
-- Model judgement evaluation (v2).
+- Fetching any real data (Tickets 2–3).
+- Any model judgement (v2).
+- Scoring or weighting — that is the shortlist stage (Ticket 5), which reads the
+  same config but is a separate path.
 
 ## How to validate
 
-- Loading a valid config yields one rule per declared must-have, each tagged with the correct kind and bound source name.
-- A config missing a required field, or with an unparseable value, aborts with a clear, specific error and produces no rules.
-- Unit tests: a rule whose input field is present and satisfies the bound → `pass`; satisfies-not → `fail`; **field absent → `fail`** (fail-closed proven).
-- Changing a bound (e.g. max price) in config and reloading changes the rule's verdict with zero code edits.
-- Each compiled rule's `kind` is queryable and matches the spec's classification for that requirement.
+1. **Round-trip a config.** Load the sample config and assert every must-have
+   compiles to a rule with the declared field, comparison, threshold, kind, and
+   bound source.
+2. **Pass/fail correctness.** Feed hand-built property records through the
+   compiled rules and assert each gate returns the expected `pass`/`fail` for
+   values above, at, and below the threshold (boundary cases included).
+3. **Fail-closed.** Feed a record with a required field missing; assert the rule
+   returns `fail (no data)` with the recorded reason — never `pass`.
+4. **Config is the only knob.** Change a threshold in the config, recompile, and
+   assert the rule's behaviour changes with no code edit. Add a new must-have in
+   config and assert it appears as a compiled rule.
+5. **v1 judgement guard.** Put a `judgement` must-have in config and assert the
+   compiler rejects it loudly in v1 mode rather than treating it as met or unmet.
+6. **Visible kind.** Assert each compiled rule exposes its `deterministic`/
+   `judgement` kind so downstream stages and the page can show it.
