@@ -12,10 +12,15 @@ other ticket fills in.
 
 Stand up a single Go **module** with a conventional layout, a pinned toolchain,
 formatting/vetting/linting wired in, a test harness, and CI that runs all of it
-on every push — so that Tickets 1–5 are each "fill in a package and its tests"
+on every push — **and stand up the whole overnight pipeline end to end as a
+heartbeat** — so that Tickets 1–5 are each "fill in a package and its tests"
 rather than "set up plumbing first". When this ticket is done, `go build ./...`
-and `go test ./...` succeed on an essentially empty-but-real project, and CI is
-green.
+and `go test ./...` succeed, CI is green, and the scheduled job actually runs
+nightly and publishes a page — it just says "alive" instead of showing listings.
+
+> **Implemented in [PR #3](https://github.com/93tilinfinity/abode/pull/3).** This
+> ticket's doc is the plan; the code/workflows live in that separate PR so this
+> planning PR stays docs-only.
 
 ## Why Go here (the short version)
 
@@ -209,12 +214,41 @@ A GitHub Actions workflow at `.github/workflows/ci.yml` that, on push/PR:
 This is the project's safety net: the daily tool can't silently rot if every
 change must pass build + test + lint first.
 
+## The overnight infrastructure (heartbeat first)
+
+The riskiest thing in a "runs unattended" tool is the *unattended* part — the
+schedule, the publish, the fail-loudly path. So this ticket stands that whole
+loop up **before any product exists**, proven by a heartbeat, and the feature
+tickets then fill it in without touching its shape:
+
+- **`cmd/abode-daily`** is the wake-work-exit batch. In this ticket its "work" is
+  a placeholder that writes a tiny static page reading *"Daily run OK. Matches
+  today: 0."* with a timestamp, logging structured start/work/done lines
+  (`log/slog`). Ticket 3 replaces the placeholder with the real finding pipeline;
+  Ticket 4 replaces the page with the sortable listings table.
+- **`.github/workflows/daily.yml`** runs it on a **cron schedule** (plus manual
+  `workflow_dispatch`) and publishes the page to **GitHub Pages**.
+- **Fail loudly is wired from day one:** a non-zero exit fails the job, which
+  **skips the deploy** (so yesterday's page survives) and triggers GitHub's
+  failure email. A zero-match run is *not* a failure — it publishes the honest
+  page and exits 0.
+
+This means Tickets 3 and 4 inherit a working, scheduled, self-publishing loop and
+only have to make the page meaningful.
+
+**One-time manual setup** (can't be done from code): enable **Settings → Pages →
+Source: GitHub Actions**, then run the `daily` workflow once. **Caveat:** GitHub
+Pages from a *private* repo needs a paid plan — on Free, make the repo public
+(the page shows only public listing data) or host the page elsewhere (e.g.
+Cloudflare Pages).
+
 ## Out of scope
 
-- Any Abode logic — that's Tickets 1–5. This ticket only proves the skeleton
-  compiles, tests, lints, and CI passes.
+- Any Abode logic — that's Tickets 1–5. This ticket proves the skeleton compiles,
+  tests, lints, CI passes, and the scheduled loop publishes a heartbeat.
 - Choosing the property API / journey provider (Ticket 3).
-- Deployment/hosting of the daily job (Ticket 4).
+- The *contents* of the page — the real sortable listings table is Ticket 4; this
+  ticket only establishes the publish loop.
 
 ## How to validate
 
@@ -231,8 +265,12 @@ change must pass build + test + lint first.
 6. **Tidy module.** `go mod tidy` produces no diff in `go.mod`/`go.sum` (imports
    and dependencies agree).
 7. **CI green.** Pushing the branch triggers the workflow and all steps pass.
-8. **Runnable binary.** `go run ./cmd/abode-daily` runs and exits 0 (a stub is
-   fine), proving the wake-work-exit shape end-to-end.
+8. **Runnable binary.** `go run ./cmd/abode-daily` runs, exits 0, and writes the
+   heartbeat page — proving the wake-work-exit shape end-to-end.
+9. **Overnight loop publishes.** The `daily` workflow (run manually once) builds
+   the page and deploys it to a live GitHub Pages URL.
+10. **Fail loudly.** A forced non-zero exit fails the workflow, the deploy step is
+    skipped (previous page intact), and the failure email fires.
 
 ## Future fit: OCR and model calls in Go (your question)
 

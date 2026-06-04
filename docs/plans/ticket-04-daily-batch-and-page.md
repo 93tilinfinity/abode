@@ -14,6 +14,11 @@ behaviour. It does **not** own the pipeline (Ticket 3) or the shortlist (Ticket 
 lives on GitHub, it's free, it runs the Go binary, holds the API keys as Actions
 secrets, and deploys the static page to a stable public URL.
 
+> The scheduled workflow, the Pages publish, and the fail-loudly wiring are
+> **already stood up as a heartbeat in [Ticket 0](../tickets/00-project-setup-go.md)**.
+> This ticket inherits that working loop and only makes the page *meaningful* —
+> replacing the heartbeat with the sortable listings table below.
+
 ## 2. The batch entrypoint — `cmd/abode-daily`
 
 A thin `main` that does exactly: load `abode.config.yaml` → run the Ticket 3
