@@ -93,7 +93,7 @@ Eight deterministic v1 gates; two judgement requirements recorded for v2.
 | 5 | ≤ 50 min commute | `commute_time` | deterministic | ✅ | `commute_minutes` ≤ **50**, Tue depart **08:00** → WC2A 1DD | journey | fail |
 | 6 | ≤ 2 transport modes | `commute_modes` | deterministic | ✅ | `commute_modes_excluding_walk` ≤ **2** (walking excluded) | journey | fail |
 | 7 | Interesting area | `interesting_area` | judgement | ❌ → v2 | — | — | judged by eye in v1 |
-| 8 | Safe area | `safe_area` | deterministic | ✅ | violent/sexual-crime national percentile ≤ **75** (exclude worst 25%) | area_crime | fail |
+| 8 | Safe area | `safe_area` | deterministic | ✅ | violent/sexual-crime count within ~1 mi over 12 mo ≤ **threshold** (tunable) | crime | fail |
 | 9 | Outdoor space | `outdoor_space` | deterministic | ✅ | `has_private_outdoor_space == true` **OR** `nearest_park_metres` ≤ **800** | property_api / greenspace | fail |
 | 10 | Fibre internet | `fibre` | deterministic | ✅ | `max_download_mbps` ≥ **300** | broadband | fail |
 
@@ -106,8 +106,11 @@ Eight deterministic v1 gates; two judgement requirements recorded for v2.
 - **Commute:** measured **Tuesday, depart 08:00**, to **81 Chancery Lane,
   WC2A 1DD**. Two separate gates — ≤ 50 min, and ≤ 2 modes with **walking
   excluded**.
-- **Safe area:** fail any area in the **worst 25% nationally** for
-  violent/sexual crime (keep ≤ 75th percentile).
+- **Safe area:** *(revised — see [Decision 0001](../decisions/0001-data-providers.md)
+  and the Ticket 4 interview)* a **raw police.uk count of violent/sexual crimes
+  within ~1 mile over the last 12 months**, failing above an **absolute, tunable
+  threshold** (placeholder 1200, calibrated in the trial). Recomputed each run;
+  no national ranking. (Originally specified as a national percentile.)
 - **Outdoor space:** OR — **any private outdoor space** (garden/yard/terrace/
   patio) satisfies it, *or* a park within **~800m** (≈10 min walk).
 - **Fibre:** any line **≥ 300 Mbps** download (FTTP, FTTC or cable).
@@ -121,14 +124,13 @@ declare them, and Ticket 3 must implement the real lookups:
 
 - `property_api` — `price_gbp`, `bedrooms`, `toilet_count`,
   `has_private_outdoor_space` (paid feed, Ticket 3 step 2).
-- `journey` — `commute_minutes` **and** `commute_modes_excluding_walk`. The
-  **catchment** (Ticket 3 step 1) is built directly from the `commute_time`
-  requirement (≤ 50 min at the configured window); per-property modes/minutes
-  come from the journey lookup (Ticket 3 step 3).
+- `journey` — `commute_minutes` **and** `commute_modes_excluding_walk`, from a
+  per-property **Google Routes** door-to-door lookup (Ticket 3 step 3). The
+  catchment (Ticket 3 step 1) is a radius pre-filter, not an isochrone — see
+  [Decision 0001](../decisions/0001-data-providers.md).
 - `broadband` — `max_download_mbps` (secondary source, Ticket 3 step 3).
 - `greenspace` — `nearest_park_metres` (secondary source, Ticket 3 step 3).
-- `area_crime` — `violent_sexual_crime_national_percentile` (area data,
-  Ticket 3 step 4).
+- `crime` — `violent_sexual_crime_1mi_12mo` (police.uk, Ticket 3 step 4).
 
 ## 8. Validation (acceptance for Ticket 1)
 
@@ -140,7 +142,7 @@ Extends the ticket's generic checklist with cases from this config:
 2. **Boundaries.** `price` passes at £625,000 and fails at £625,001; `bedrooms`
    passes at 2, fails at 1; `commute_time` passes at 50 min, fails at 51;
    `commute_modes` passes at 2, fails at 3; `fibre` passes at 300, fails at 299;
-   `safe_area` passes at the 75th percentile, fails at the 76th.
+   `safe_area` passes at the threshold count, fails one above it.
 3. **Composite OR.** `outdoor_space` passes a property with a garden and no
    nearby park; passes one with no garden but a park at 800m; fails one with
    neither; returns `fail (no data)` if *both* branches are unobtainable.

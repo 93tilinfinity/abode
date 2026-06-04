@@ -93,11 +93,12 @@ requirements:
   - id: safe_area
     description: "Safe area so my partner isn't in danger walking home late at night"
     kind: deterministic
-    field: violent_sexual_crime_national_percentile   # higher percentile = more crime
-    source: area_crime
+    field: violent_sexual_crime_1mi_12mo   # raw police.uk count within ~1 mile, last 12 months
+    source: crime
     op: "<="
-    value: 75               # exclude the worst 25% nationally (keep <= 75th percentile)
+    value: 1200             # PLACEHOLDER cutoff — calibrate against known areas during the trial
     on_missing: fail
+    notes: "Absolute, tunable cutoff; lower is safer. Recomputed each run (no national ranking)."
 
   - id: outdoor_space
     description: "Garden or next to a park for peace of mind while WFH"

@@ -20,7 +20,7 @@ framework, the rules, the page, or the shortlist.
 | `broadband` | Ofcom postcode data / PropertyData `/internet-speed` | max download Mbps | light-lookup |
 | `greenspace` | OSM Overpass / OS Open Greenspace | nearest-park metres | light-lookup (free) |
 | `journey` | Google Routes (transit) | commute minutes, non-walking mode count | light-lookup (paid tier) |
-| `crime` | police.uk + ONS population | LSOA violent/sexual-crime national percentile | area-data (free) |
+| `crime` | police.uk | violent/sexual-crime count within ~1 mi, last 12 mo | area-data (free) |
 
 ## 2. The pipeline, step by step
 
@@ -68,21 +68,21 @@ Google Routes only ever runs on properties that already passed everything else:
    distinct non-walking leg modes for `commute_modes ≤ 2`. Runs only on survivors
    of all the above, minimising paid journeys.
 
-### Step 4 — Area crime, by LSOA (light, on survivors)
-Map each survivor to its **LSOA** (postcodes.io returns it), then evaluate the
-`safe_area` gate as the **violent/sexual-crime rate per head over the last 12
-months, ranked nationally** — fail if the LSOA is in the worst 25% (above the
-75th percentile). Crime fetched per LSOA once and reused for all properties in it.
+### Step 4 — Area crime (light, on survivors)
+For each survivor, query **police.uk** for violent/sexual crimes within **~1 mile**
+of the property over the **last 12 months** (12 monthly snapshots, summed), and
+fail the `safe_area` gate if the count exceeds an **absolute, tunable threshold**
+(config `value`, placeholder 1200, calibrated in the trial). This is fully
+recomputed each run — no national distribution, no ONS population, no reference
+table — so it sits cleanly inside Ticket 2's "no cross-run cache" rule. Crime is
+fetched per area once and reused for nearby properties within the run.
 
-> **Wrinkle to resolve (national reference distribution).** Ranking an LSOA
-> *nationally* needs the national distribution of LSOA crime rates. Rebuilding
-> that every run from police.uk's per-area API is impractical (it's not a bulk
-> national feed), which conflicts with Ticket 2's "no cross-run cache" decision.
-> **Recommendation:** treat the national crime-rate distribution as a small
-> **reference table refreshed periodically** (police.uk data is monthly, so
-> monthly is ample) — a deliberate, narrow exception to "recompute all", since
-> it's reference data, not per-run state. Flagged for your confirmation; the
-> alternative is a simpler non-national measure (e.g. raw counts within a radius).
+> **Resolved (was a wrinkle).** The earlier LSOA national-percentile method
+> needed a national reference distribution that couldn't be rebuilt per run. The
+> chosen radius-count-with-absolute-threshold avoids that entirely. Trade-off:
+> the cutoff is an absolute number (not "worst 25% nationally"), so it isn't
+> population-adjusted and must be **calibrated against known good/bad areas during
+> the trial**; the placeholder is a starting point, not a tuned value.
 
 ## 3. The matching set
 
@@ -98,7 +98,7 @@ with the paid Google journey deliberately last.
 | Search radius | **30 miles / 48 km** | Covers fast-rail commuter towns; moderate fetch/journey volume. |
 | Availability | **Include under-offer / Sold-STC** (`exclude_sstc=0`) | Bigger candidate set → more EPC/broadband/greenspace lookups and **more Google journeys** (watch the free tier); page shows homes that may already be under offer. |
 | List coverage | **Decide in the free trial** | A measurement task precedes locking the list strategy. |
-| Safety measure | **LSOA, per-capita, 12 months, national percentile** | Fine-grained + population-adjusted; needs ONS populations and a national reference distribution (see wrinkle). |
+| Safety measure | **Raw police.uk count within ~1 mi over 12 mo, absolute tunable threshold** | No reference data; recomputes each run. Not population-adjusted — cutoff must be calibrated in the trial. |
 
 ## 5. Hand-offs
 
@@ -128,10 +128,10 @@ with the paid Google journey deliberately last.
 6. **Fibre fail-closed.** A postcode with unknown broadband fails the fibre gate.
 7. **Outdoor OR short-circuit.** A garden property passes without a greenspace
    call; a garden-less one passes iff a park is ≤ 800 m; neither → fail closed.
-8. **Crime by LSOA.** Two LSOAs either side of the 75th national percentile: every
-   property in the worse one fails `safe_area`, none in the better one fails on
-   it; crime is fetched once per LSOA. (Plus: the national reference approach
-   agreed per §2 is implemented as decided.)
+8. **Crime threshold.** Two locations either side of the configured count
+   threshold: the property near more crime fails `safe_area`, the other passes;
+   the 12-month window is summed correctly and crime is fetched once per area and
+   reused. Changing the threshold in config moves the line with no code edit.
 9. **Coverage trial.** A documented trial run measuring PropertyData list coverage
    vs a reference Rightmove search, with the chosen list strategy recorded.
 10. **End-to-end.** With fixed mock providers and the example config, the pipeline

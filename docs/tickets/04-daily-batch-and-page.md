@@ -2,6 +2,10 @@
 
 **Depends on:** Ticket 3 (produces the matching set this ticket renders and schedules).
 
+> **Worked plan:** [`plans/ticket-04-daily-batch-and-page.md`](../plans/ticket-04-daily-batch-and-page.md)
+> — GitHub Actions + Pages, fail-loudly via the Actions failure email, public
+> page, default sort newest-first.
+
 ## Goal
 
 Run the finding pipeline unattended once a day and publish its matches as one
