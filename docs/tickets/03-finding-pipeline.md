@@ -2,6 +2,12 @@
 
 **Depends on:** Ticket 1 (rules) and Ticket 2 (source framework + ordering).
 
+> **Provider choices:** see [Decision 0001 — Data providers](../decisions/0001-data-providers.md).
+> In short: **PropertyData** is the listings spine; **free OGL sources** supply
+> EPC+floor-area, crime and sold comps; commute is a **radius pre-filter + Google
+> Routes door-to-door** check rather than a computed isochrone (this refines
+> Step 1 below).
+
 ## Goal
 
 Implement the four real data sources of the v1 evaluation algorithm as uniform
