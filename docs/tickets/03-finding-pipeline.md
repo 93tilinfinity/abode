@@ -2,6 +2,10 @@
 
 **Depends on:** Ticket 1 (rules) and Ticket 2 (source framework + ordering).
 
+> **Worked plan:** [`plans/ticket-03-finding-pipeline.md`](../plans/ticket-03-finding-pipeline.md)
+> — the six concrete sources, provider bindings, and captured decisions (30-mile
+> radius, include SSTC, list coverage TBD in trial, LSOA per-capita safety).
+>
 > **Provider choices:** see [Decision 0001 — Data providers](../decisions/0001-data-providers.md).
 > In short: **PropertyData** is the listings spine; **free OGL sources** supply
 > EPC+floor-area, crime and sold comps; commute is a **radius pre-filter + Google
