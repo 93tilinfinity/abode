@@ -1,0 +1,9 @@
+# golangci-lint configuration (v2). Run locally with `make lint`.
+version: "2"
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused

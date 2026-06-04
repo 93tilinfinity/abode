@@ -1,0 +1,44 @@
+name: daily
+
+# The overnight infrastructure: run the batch once a day and publish the page.
+on:
+  schedule:
+    # 05:00 UTC ≈ 06:00 BST / 05:00 GMT. Cron is always UTC; the 1h DST drift is
+    # harmless for a daily page.
+    - cron: "0 5 * * *"
+  workflow_dispatch: {} # allow manual runs to test the loop
+
+# Permissions required to publish to GitHub Pages.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never run two deploys at once.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      # Run the batch. A non-zero exit fails the job here, so the deploy steps
+      # below are skipped and the previously published page stays live.
+      - name: Run daily batch
+        run: go run ./cmd/abode-daily
+        env:
+          ABODE_OUTPUT_DIR: public
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+      - id: deploy
+        uses: actions/deploy-pages@v4
