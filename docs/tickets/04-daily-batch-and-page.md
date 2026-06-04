@@ -1,75 +1,53 @@
 # Ticket 4 — Daily batch runner & static sortable page
 
-**Depends on:** Ticket 3 (produces the matching set this ticket renders and schedules).
+**Depends on:** Ticket 3 (the matching set this renders and schedules).
 
-> **Worked plan:** [`plans/ticket-04-daily-batch-and-page.md`](../plans/ticket-04-daily-batch-and-page.md)
-> — GitHub Actions + Pages, fail-loudly via the Actions failure email, public
-> page, default sort newest-first.
+> Plan: [`plans/ticket-04-daily-batch-and-page.md`](../plans/ticket-04-daily-batch-and-page.md) — GitHub Actions + Pages, fail-loudly via the Actions failure email, public page, default newest-first.
 
 ## Goal
 
-Run the finding pipeline unattended once a day and publish its matches as one
-static, sortable HTML page at a stable public address — wake, do the work, write
-the page, exit. Fail loudly if anything breaks; never silently produce nothing.
+Run the pipeline unattended once a day and publish its matches as one static,
+sortable HTML page at a stable public URL — wake, work, write, exit. Fail loudly;
+never silently produce nothing.
 
 Deliver:
 
-- **A batch entry point.** A simple wake-work-exit job: load config, run the
-  Ticket 3 pipeline, render the page, write it to the published location, exit.
-  No long-running process, no state held between runs beyond caches.
-- **Platform scheduling.** The job is scheduled by the platform (cron / scheduled
-  task / CI schedule) on free or low-cost infra. The code stays a plain batch
-  task; the schedule lives in platform config, documented in the repo.
-- **The page — one static HTML file**, regenerated each run, served at a stable
-  public URL. It shows the current matching set as a table: one row per property
-  **with a photo**, columns **price, floor area, bedrooms, bathrooms, commute
-  time, postcode, link out**. Every column is **clickable to sort ascending or
-  descending**, client-side. A sensible default order, but the system imposes no
-  opinion beyond it — the couple reorder to suit. Public is acceptable because it
-  shows only already-public listing data. Floor area is shown **as advertised**,
-  not as ground truth (per the SPEC's "honest about what it knows" principle) —
-  labelled so the couple don't read more certainty into it than the feed supports.
-- **Fail-loudly behaviour.** Any failure (pipeline error, empty/garbage feed,
-  write failure) surfaces visibly — a non-zero exit and a surfaced error — rather
-  than overwriting yesterday's good page with a blank one. Distinguish "ran, zero
-  matches today" (legitimate, page says so) from "the run broke" (loud failure,
-  last good page left intact).
+- **A batch entry point** — wake-work-exit: load config → run the Ticket 3 pipeline
+  → render → write to the published location → exit. No long-running process, no
+  state held between runs beyond in-run caches.
+- **Platform scheduling** on free/low-cost infra (cron / CI schedule). The code
+  stays a plain batch task; the schedule lives in repo'd platform config.
+- **The page** — one static HTML file, regenerated each run: one row per property
+  **with a photo**; columns **price, floor area, beds, baths, commute time,
+  postcode, link out**; every column **click-sortable** (numeric columns sort
+  numerically), with a sensible default the couple can override. Floor area shown
+  **as advertised** and labelled (honest about what it knows). Public is fine — only
+  already-public listing data.
+- **Fail loudly.** Any failure (pipeline error, garbage feed, write failure) → a
+  non-zero exit and a surfaced error, **not** a blank page over yesterday's good
+  one. Distinguish "ran, zero matches today" (legitimate, page says so, exit 0) from
+  "the run broke" (loud failure, last good page left intact).
 
 ## Out of scope
 
-- The nudge email pointing to the page (v2).
-- Favourites / any interactivity beyond column sorting (v2+).
-- The shortlist comparison (Ticket 5).
-- Maps, change-tracking between days (deferred).
+Nudge email (v2); favourites / interactivity beyond sorting (v2+); shortlist
+(Ticket 5); maps, change-tracking between days (deferred).
 
-## How to validate
+## Validate
 
-1. **Wake-work-exit.** Invoke the batch entry point against a mock pipeline and
-   assert it loads config, runs the pipeline, writes the HTML file, and exits 0 —
-   holding no process open afterward.
-2. **Page contents.** Render a known matching set and assert the HTML has one row
-   per property, each with a photo and all required columns (price, floor area,
-   beds, baths, commute time, postcode, link out).
-3. **Sortable columns.** Load the rendered page and assert clicking each column
-   header reorders the rows ascending then descending (numeric columns sort
-   numerically, not lexically), with a defined default order on load.
-4. **Stable address & overwrite.** Run twice and assert the page is written to
-   the same stable path and reflects the latest run.
-5. **Zero matches vs failure.** Run with an empty-but-valid result and assert the
-   page renders cleanly saying zero matches (exit 0). Then force a pipeline error
-   and assert the job exits non-zero, surfaces the error, and does **not** clobber
-   the previous good page.
-6. **Scheduling documented.** Assert the repo contains the schedule definition and
-   a runbook note so the daily run is reproducible on the chosen infra.
+1. **Wake-work-exit.** Against a mock pipeline: loads config, runs it, writes the
+   HTML, exits 0, holds no process open.
+2. **Page contents.** A known matching set → one row per property with a photo and
+   all required columns.
+3. **Sortable.** Each header sorts asc/desc (numeric numerically), with a defined
+   default order on load.
+4. **Stable address.** Two runs write the same path, reflecting the latest run.
+5. **Zero vs failure.** An empty-but-valid result → clean "0 matches" page, exit 0.
+   A forced pipeline error → non-zero exit, surfaced, previous page **not** clobbered.
+6. **Scheduling documented.** The repo holds the schedule definition and a runbook
+   note so the daily run is reproducible.
 
-## Hygiene gate (before committing)
+## Hygiene gate
 
-Before every commit on this ticket, the project hygiene gate must be green:
-
-- `make check` passes — `gofmt -l .` clean, and `go vet ./...`, `go build ./...`,
-  `go test ./...` all succeed;
-- the new/changed behaviour is covered by tests;
-- nothing is committed red (CI re-runs the same checks on push).
-
-(The gate and the `make check` target are established in
-[Ticket 0](00-project-setup-go.md).)
+`make check` green with tests for new behaviour before every commit — see
+[Ticket 0](00-project-setup-go.md).

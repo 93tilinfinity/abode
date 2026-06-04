@@ -1,95 +1,66 @@
 # Ticket 5 — Shortlist comparison
 
-> **Deferred to v2 (not built in v1).** Its input is the v2 favourites/page-marking
-> layer, so the shortlist is built alongside favourites. This document remains the
-> design for when it's built. Decisions captured for then: shortlist properties are
-> **marked on the page** (favourites), weights default to **equal across the four
-> criteria**, and the too-close-to-call flag exists to avoid implying false
-> precision when two totals are effectively tied.
+> **Deferred to v2** — built alongside the v2 favourites layer that feeds it. Design
+> captured: the shortlist is marked on the page; weights default **equal across the
+> four criteria**; a too-close-to-call flag avoids false precision on near-ties.
 
-**Depends on:** Ticket 1 (config holds the weights) and the property record shape
-from Ticket 3 (incl. `commute_time`); sold-price comps come from the free HM Land
-Registry source. Otherwise a separate stage — not part of the daily finding loop.
+**Depends on:** Ticket 1 (weights in config) + the Ticket 3 property record (incl.
+`commute_time`); comps from the free HM Land Registry. A separate stage, not the
+daily finding loop.
 
 ## Goal
 
-Build the on-demand decision aid: for the 10–15 properties the couple actually
-like, score the measurable criteria by transparent formula, normalised across the
-shortlist, with the couple's own weights — and present a single sortable metric
-plus a full, interrogable breakdown. Explainability over precision: every number
-traces back to the evidence that produced it.
+An on-demand decision aid: for the 10–15 properties the couple actually like, score
+the measurable criteria by transparent formula, normalised across the shortlist,
+with their own weights — a single sortable metric plus a fully interrogable
+breakdown. Explainability over precision: every number traces to its evidence.
 
 Deliver:
 
-- **A shortlist input.** The couple mark which properties form the shortlist
-  (10–15). The system scores only this hand-picked group — weighted scoring is
-  meaningful only on a small, genuinely-considered set, never the full survivor
-  set.
-- **Measurable-criteria scoring.** Score **price, floor area, commute, and
-  price-per-square-foot vs comps**, each by a transparent formula, **normalised
-  relative to the shortlist** (best-in-shortlist anchors the scale). Each criterion
-  score carries a **stated reason** in evidence terms (e.g. "8.5/10 — 11% below
-  local median £/sqft").
-- **Comp data for £/sqft.** The £/sqft-vs-comps criterion needs sold-price comps,
-  pulled free from **HM Land Registry Price Paid**. Fetch them as a light
-  per-property lookup **for the shortlisted set only** (10–15 items, so cheap),
-  cached. A property whose comps are
-  unrecoverable scores that one criterion as unavailable (and says so) rather than
-  guessing — it does not fail the property, since the shortlist is a comparison,
-  not a gate.
-- **Couple-set weights, out of 100.** Weights live in config (Ticket 1), set by
-  the couple exactly as in a manual spreadsheet. The total is the weighted sum.
-- **Output.** A single **sortable** total metric per property, **plus** a full
-  breakdown showing which criteria drove each total, **plus** an explicit
-  **"too close to call"** flag on any pair whose totals are within a small margin
-  — the tool refuses false precision the data can't justify.
-- **v1 boundary, enforced.** Only measurable criteria are scored. Judgement
-  criteria (condition, area feel) are **not** scored in v1, and the model is
-  **never** used to score a criterion that has a real number. Leave a clean seam
-  for v2 judgement criteria (each later carrying a written justification, weighted
-  cautiously) without building them now.
+- **Shortlist input.** The couple mark 10–15 properties; only this hand-picked set
+  is scored (weighting is meaningful only on a small considered set, never the full
+  survivor set).
+- **Measurable-criteria scoring** — **price, floor area, commute, £/sqft vs comps**
+  — each by transparent formula, **normalised to the shortlist** (the best value
+  anchors the scale), each carrying a **stated reason** ("8.5/10 — 11% below local
+  median £/sqft").
+- **Comp data** for £/sqft from **HM Land Registry Price Paid** — a light
+  per-property lookup for the 10–15 only, cached. Unrecoverable comps → that
+  criterion scores "unavailable" (and says so), never guessed; the property is not
+  failed (this is a comparison, not a gate).
+- **Couple-set weights out of 100** (config, Ticket 1); the total is the weighted sum.
+- **Output** — one sortable total per property, a breakdown of which criteria drove
+  it, and a **"too close to call"** flag on near-ties (refusing precision the data
+  can't justify).
+- **v1 boundary.** Only measurable criteria are scored; judgement criteria
+  (condition, area feel) are not; the model is **never** used where a real number
+  exists. Leave a clean seam for v2 judgement criteria (each later carrying a written
+  justification, weighted cautiously).
 
-This stage is an input to a human decision, not the decision. Its most valuable
-output is the disagreement it surfaces — why a loved property scored below a
-lukewarm one — so the breakdown must make that legible.
+An input to a human decision, not the decision — its most valuable output is the
+disagreement it surfaces (why a loved property scored below a lukewarm one), so the
+breakdown must make that legible.
 
 ## Out of scope
 
-- Any model judgement / condition / area-feel scoring (v2).
-- The daily page and finding loop (Tickets 3–4).
-- Making the decision for the couple — it only informs.
+Model / condition / area-feel scoring (v2); the daily page and finding loop
+(Tickets 3–4); making the decision for the couple.
 
-## How to validate
+## Validate
 
-1. **Normalisation.** Score a fixed shortlist and assert each criterion is scaled
-   relative to the shortlist (the best value on a criterion anchors the top of
-   that criterion's scale), recomputing correctly when a property is added or
-   removed.
-2. **Weights drive totals.** Change the weights in config and assert the totals
-   and resulting order change accordingly — with no code edit.
-3. **Stated reasons.** Assert every criterion score exposes an evidence-based
-   reason string (value + comparison to the shortlist/comps), not a bare number.
-4. **Traceability.** Assert each total decomposes exactly into its weighted
-   criterion contributions — the breakdown sums to the total, so any score can be
-   interrogated.
-5. **Too-close-to-call.** Construct two properties with near-equal totals and
-   assert the pair is flagged rather than presented as a confident ranking.
-6. **Sortable output.** Assert the result can be sorted by total and by any
-   individual criterion.
-7. **v1 boundary.** Assert no judgement criterion is scored, and that a criterion
-   backed by a real number is never routed through a model.
-8. **Disagreement is legible.** Given a "loved" property scoring below a
-   "lukewarm" one, assert the breakdown makes the driving criteria explicit so the
-   couple can see why.
+1. **Normalisation** scales each criterion to the shortlist; recomputes on
+   add/remove.
+2. **Weights drive totals** — changing config weights reorders, with no code edit.
+3. **Stated reasons** — every criterion score exposes an evidence string, not a bare
+   number.
+4. **Traceability** — each total decomposes exactly into its weighted contributions.
+5. **Too-close-to-call** — near-equal totals are flagged, not ranked confidently.
+6. **Sortable** by total and by any individual criterion.
+7. **v1 boundary** — no judgement criterion is scored; a numeric criterion is never
+   routed through a model.
+8. **Disagreement legible** — a loved-below-lukewarm case shows the driving criteria.
 
-## Hygiene gate (before committing)
+## Hygiene gate
 
-Before every commit on this ticket, the project hygiene gate must be green:
-
-- `make check` passes — `gofmt -l .` clean, and `go vet ./...`, `go build ./...`,
-  `go test ./...` all succeed;
-- the new/changed behaviour is covered by tests;
-- nothing is committed red (CI re-runs the same checks on push).
-
-(The gate and the `make check` target are established in
-[Ticket 0](00-project-setup-go.md).)
+`make check` green with tests for new behaviour before every commit — see
+[Ticket 0](00-project-setup-go.md).
