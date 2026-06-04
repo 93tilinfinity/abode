@@ -65,3 +65,15 @@ paid API, fibre, area data) are implemented in Ticket 3 against this interface.
    closed.
 7. **One-file add.** Add a new stub source in a single file, register it, and
    assert it slots into the order automatically with no other change.
+
+## Hygiene gate (before committing)
+
+Before every commit on this ticket, the project hygiene gate must be green:
+
+- `make check` passes — `gofmt -l .` clean, and `go vet ./...`, `go build ./...`,
+  `go test ./...` all succeed;
+- the new/changed behaviour is covered by tests;
+- nothing is committed red (CI re-runs the same checks on push).
+
+(The gate and the `make check` target are established in
+[Ticket 0](00-project-setup-go.md).)

@@ -62,3 +62,15 @@ source for a field. Where that field comes from is Ticket 2's concern.
    compiler rejects it loudly in v1 mode rather than treating it as met or unmet.
 6. **Visible kind.** Assert each compiled rule exposes its `deterministic`/
    `judgement` kind so downstream stages and the page can show it.
+
+## Hygiene gate (before committing)
+
+Before every commit on this ticket, the project hygiene gate must be green:
+
+- `make check` passes — `gofmt -l .` clean, and `go vet ./...`, `go build ./...`,
+  `go test ./...` all succeed;
+- the new/changed behaviour is covered by tests;
+- nothing is committed red (CI re-runs the same checks on push).
+
+(The gate and the `make check` target are established in
+[Ticket 0](00-project-setup-go.md).)

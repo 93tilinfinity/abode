@@ -237,10 +237,9 @@ This means Tickets 3 and 4 inherit a working, scheduled, self-publishing loop an
 only have to make the page meaningful.
 
 **One-time manual setup** (can't be done from code): enable **Settings → Pages →
-Source: GitHub Actions**, then run the `daily` workflow once. **Caveat:** GitHub
-Pages from a *private* repo needs a paid plan — on Free, make the repo public
-(the page shows only public listing data) or host the page elsewhere (e.g.
-Cloudflare Pages).
+Source: GitHub Actions**, then run the `daily` workflow once. The repo is
+**public**, so GitHub Pages works on the Free plan; the page only ever shows
+already-public listing data.
 
 ## Out of scope
 
@@ -297,3 +296,16 @@ APIs over HTTP** for both OCR and model work, which keeps them consistent with
 the "uniform pluggable source" design and avoids CGo. The only time Go gets
 fiddly is if you insist on running OCR *in-process* via Tesseract/CGo — and you
 don't have to.
+
+## Hygiene gate (before committing) — established here, repeated by every ticket
+
+This ticket defines the gate every later ticket must pass **before each commit**:
+
+- `make check` is green — `gofmt -l .` reports nothing, and `go vet ./...`,
+  `go build ./...`, `go test ./...` all pass;
+- new or changed behaviour carries tests (table-driven where it fits);
+- nothing is committed red. CI re-runs the same checks on push, and the `daily`
+  workflow publishes only on a successful run.
+
+Every subsequent ticket (1–5) restates this gate in its own **Hygiene gate**
+section so it is never skipped.

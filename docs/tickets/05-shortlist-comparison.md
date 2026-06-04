@@ -75,3 +75,15 @@ lukewarm one — so the breakdown must make that legible.
 8. **Disagreement is legible.** Given a "loved" property scoring below a
    "lukewarm" one, assert the breakdown makes the driving criteria explicit so the
    couple can see why.
+
+## Hygiene gate (before committing)
+
+Before every commit on this ticket, the project hygiene gate must be green:
+
+- `make check` passes — `gofmt -l .` clean, and `go vet ./...`, `go build ./...`,
+  `go test ./...` all succeed;
+- the new/changed behaviour is covered by tests;
+- nothing is committed red (CI re-runs the same checks on push).
+
+(The gate and the `make check` target are established in
+[Ticket 0](00-project-setup-go.md).)

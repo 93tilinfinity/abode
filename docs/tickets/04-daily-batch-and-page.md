@@ -61,3 +61,15 @@ Deliver:
    the previous good page.
 6. **Scheduling documented.** Assert the repo contains the schedule definition and
    a runbook note so the daily run is reproducible on the chosen infra.
+
+## Hygiene gate (before committing)
+
+Before every commit on this ticket, the project hygiene gate must be green:
+
+- `make check` passes — `gofmt -l .` clean, and `go vet ./...`, `go build ./...`,
+  `go test ./...` all succeed;
+- the new/changed behaviour is covered by tests;
+- nothing is committed red (CI re-runs the same checks on push).
+
+(The gate and the `make check` target are established in
+[Ticket 0](00-project-setup-go.md).)

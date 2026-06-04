@@ -89,3 +89,15 @@ scheduling are Ticket 4.
    pipeline returns exactly the properties that pass all gates — and that flipping
    one config threshold changes the matching set as expected (ties back to
    Ticket 1).
+
+## Hygiene gate (before committing)
+
+Before every commit on this ticket, the project hygiene gate must be green:
+
+- `make check` passes — `gofmt -l .` clean, and `go vet ./...`, `go build ./...`,
+  `go test ./...` all succeed;
+- the new/changed behaviour is covered by tests;
+- nothing is committed red (CI re-runs the same checks on push).
+
+(The gate and the `make check` target are established in
+[Ticket 0](00-project-setup-go.md).)
