@@ -54,6 +54,12 @@ For the surviving set, pull the relevant area-level data by area (e.g. crime sta
 
 The properties passing every step are the day's matches. By construction the only broad fetch is the single portal search; everything after is light lookups on a shrinking set, with the costliest (the per-property commute journey) deliberately last.
 
+## What "correct" means (the golden validation)
+
+Every per-step check in the tickets — pagination works, a gate fails closed, the journey runs last — is scaffolding that keeps the build honest. None of them is the bar. **The decisive test of the whole system is end-to-end, and it can only run once the requirements are fully determined:** take the couple's complete, finalised must-haves — every threshold locked (price ceiling, search radius, fibre floor, the *calibrated* crime cutoff) — run them through the full pipeline, and judge the **matching set itself**. It is correct when every surfaced property genuinely satisfies every requirement and nothing that qualifies is missing.
+
+This has a sequencing consequence: several thresholds are deliberate placeholders (e.g. the crime cutoff, the radius) to be calibrated against known-good and known-bad areas during the trial. Until they are settled, the intermediate checks are all we have — but the finalised requirement set, run end-to-end, is the golden source of validation, and acceptance is judged there.
+
 ## Versioning
 
 **v1 — the whole loop, deterministic only, page-delivered.** Set the search area → scrape the portal → secondary-source gates (broadband, parks, commute) → area-data population, producing the daily sortable page. No shortlist comparison, no email, no favourites, no OCR, no model judgement anywhere. This is the complete, useful system on its own: it finds and presents the matches on a page the couple open when they want, and they judge condition and area feel with their own eyes, as they would anyway.

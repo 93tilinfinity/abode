@@ -61,6 +61,12 @@ shrinking set.
 
 ## How to validate
 
+> **The golden validation is end-to-end, once the requirements are finalised** —
+> the complete must-have set (all thresholds locked, crime cutoff and radius
+> calibrated) run through the full pipeline, judged on the *matching set itself*
+> (see SPEC, "What 'correct' means"). The checks below are scaffolding that keep
+> the build honest on the way there; they are not the acceptance bar.
+
 1. **Complete scrape.** Against a known Rightmove search for the area, assert the
    pipeline's candidate count matches (pagination works) and that a query which
    would exceed ~1,050 results is tiled by price band and de-duplicated rather
