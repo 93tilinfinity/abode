@@ -45,6 +45,9 @@ for the full intended package layout the feature tickets grow into.)
 2. Trigger the `daily` workflow once via **Actions → daily → Run workflow** to
    confirm the page publishes.
 
+The repo is **public**, so GitHub Pages is available on the Free plan; the page
+only ever shows already-public listing data.
+
 Future feature tickets will add API credentials as **Actions secrets**
 (`PROPERTYDATA_KEY`, `GOOGLE_ROUTES_KEY`, `EPC_API_KEY`); none are needed for the
 heartbeat.
