@@ -97,8 +97,9 @@ Deferred, not designed out (the uniform-component structure leaves room without 
 
 ## Implementation tickets
 
-The v1 build is broken into five tickets, ordered by dependency. Each has a clear goal and an explicit way to validate it.
+The v1 build is a setup ticket plus five feature tickets, ordered by dependency. Each has a clear goal and an explicit way to validate it.
 
+0. [Go project setup](tickets/00-project-setup-go.md) — the module, layout, toolchain, tests, lint, and CI the feature tickets build into.
 1. [Config & requirement compiler](tickets/01-config-and-requirement-compiler.md) — the single source of truth and the pass/fail gate engine.
 2. [Pluggable data-source framework](tickets/02-data-source-framework.md) — uniform components and cheap-to-expensive orchestration.
 3. [The finding pipeline](tickets/03-finding-pipeline.md) — catchment → paid search → gap-fill → area data, producing the daily matches.

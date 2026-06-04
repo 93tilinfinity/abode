@@ -1,6 +1,8 @@
 # Ticket 1 — Config & requirement compiler
 
-**Depends on:** nothing. This is the foundation every other ticket reads from.
+**Depends on:** [Ticket 0](00-project-setup-go.md) (the Go project skeleton).
+This is the first *feature* ticket — the foundation every other feature ticket
+reads from.
 
 > **Worked plan:** [`plans/ticket-01-config-and-compiler.md`](../plans/ticket-01-config-and-compiler.md)
 > — built against the couple's real must-haves, with a sample config at
