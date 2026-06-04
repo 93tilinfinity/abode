@@ -1,5 +1,12 @@
 # Ticket 5 — Shortlist comparison
 
+> **Deferred to v2 (not built in v1).** Its input is the v2 favourites/page-marking
+> layer, so the shortlist is built alongside favourites. This document remains the
+> design for when it's built. Decisions captured for then: shortlist properties are
+> **marked on the page** (favourites), weights default to **equal across the four
+> criteria**, and the too-close-to-call flag exists to avoid implying false
+> precision when two totals are effectively tied.
+
 **Depends on:** Ticket 1 (config holds the weights), Ticket 2 (data-source
 framework, used to pull sold-price comps), and the property record shape from
 Ticket 3 (incl. `commute_time`). Otherwise a separate stage — not part of the
