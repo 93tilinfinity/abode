@@ -7,10 +7,9 @@
 > criteria**, and the too-close-to-call flag exists to avoid implying false
 > precision when two totals are effectively tied.
 
-**Depends on:** Ticket 1 (config holds the weights), Ticket 2 (data-source
-framework, used to pull sold-price comps), and the property record shape from
-Ticket 3 (incl. `commute_time`). Otherwise a separate stage — not part of the
-daily finding loop.
+**Depends on:** Ticket 1 (config holds the weights) and the property record shape
+from Ticket 3 (incl. `commute_time`); sold-price comps come from the free HM Land
+Registry source. Otherwise a separate stage — not part of the daily finding loop.
 
 ## Goal
 
@@ -32,9 +31,9 @@ Deliver:
   score carries a **stated reason** in evidence terms (e.g. "8.5/10 — 11% below
   local median £/sqft").
 - **Comp data for £/sqft.** The £/sqft-vs-comps criterion needs sold-price comps,
-  which the SPEC's data strategy assigns to the paid API. Pull them as a light
+  pulled free from **HM Land Registry Price Paid**. Fetch them as a light
   per-property lookup **for the shortlisted set only** (10–15 items, so cheap),
-  through the Ticket 2 data-source framework, cached. A property whose comps are
+  cached. A property whose comps are
   unrecoverable scores that one criterion as unavailable (and says so) rather than
   guessing — it does not fail the property, since the shortlist is a comparison,
   not a gate.

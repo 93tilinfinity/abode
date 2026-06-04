@@ -11,8 +11,7 @@ Ticket 1 owns **the rules, not the data**. It reads one config file, turns each
 must-have into a callable rule that returns `pass` / `fail` / `fail (no data)`,
 and records each rule's kind (`deterministic` vs `judgement`). It does **not**
 fetch anything — every rule names a *source* it will later ask for a field. The
-sources themselves (and their cost-ordering) are Ticket 2; the real data behind
-them is Ticket 3.
+real data behind those source names is Ticket 3's pipeline.
 
 ## 2. The config file
 
@@ -36,7 +35,7 @@ Each requirement compiles to a rule carrying:
 | `description` | the plain-language "why", verbatim from the couple |
 | `kind` | `deterministic` (v1 gate) or `judgement` (v2, recorded only) |
 | `field` | the property attribute the rule reads |
-| `source` | which data-source component (Ticket 2) supplies the field |
+| `source` | which pipeline lookup (Ticket 3) supplies the field |
 | `op` | comparison: `<=`, `>=`, `<`, `>`, `==`, `within` |
 | `value` | the threshold |
 | `on_missing` | `fail` (default) — fail closed if the field can't be obtained |
@@ -50,7 +49,7 @@ Each requirement compiles to a rule carrying:
    A `deterministic` requirement must have either (`field` + `source` + `op` +
    `value`) or a composite (`any_of`/`all_of`); a `judgement` requirement must
    declare `defer_to`. Unknown `op`, duplicate `id`, or a `source` not registered
-   in Ticket 2's framework is a loud compile error — config never half-compiles.
+   by Ticket 3's pipeline is a loud compile error — config never half-compiles.
 3. **Bind** each `field`/`source` pair to the data-source component that
    produces it (binding only — no fetch).
 4. **Compile** each requirement into a callable rule `(property) -> Verdict`,
@@ -119,11 +118,11 @@ Eight deterministic v1 gates; two judgement requirements recorded for v2.
 
 ## 7. Hand-offs this plan creates for later tickets
 
-The compiler binds these `source` names; Ticket 2 must register components that
-declare them, and Ticket 3 must implement the real lookups:
+The compiler binds these `source` names; Ticket 3's pipeline implements the real
+lookups behind them:
 
 - `property_api` — `price_gbp`, `bedrooms`, `toilet_count`,
-  `has_private_outdoor_space` (paid feed, Ticket 3 step 2).
+  `has_private_outdoor_space` (scraped from Rightmove, Ticket 3 step 1).
 - `journey` — `commute_minutes` **and** `commute_modes_excluding_walk`, from a
   per-property **Google Routes** door-to-door lookup (Ticket 3 step 3). The
   catchment (Ticket 3 step 1) is a radius pre-filter, not an isochrone — see

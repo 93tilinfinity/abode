@@ -22,9 +22,9 @@ These are the commitments the design answers to; when a choice is unclear, they 
 
 **Config is the only source of truth.** The must-haves and settings live in one editable file. Changing what you want means editing config, not code.
 
-**Uniform parts.** Every data source is the same kind of pluggable component, declaring what it needs, what it produces, and how costly it is. Adding a source is a one-file change; the system orders everything automatically.
+**A simple, fixed pipeline.** The checks run in one hand-written order, cheapest first, each shrinking the set before the next runs. There is no plugin framework and no ordering engine — it's a short, readable sequence of steps you can follow top to bottom.
 
-**Buy simplicity where it's worth it.** A paid property API is used deliberately to collapse many fragmented data sources into single field-reads, and to keep the listings feed licensed rather than scraped. It is never expected to answer things that aren't property data.
+**One portal, filtered at the source.** Listings come from a single portal (Rightmove), queried through its own search API so price, bedrooms and location are filtered *before* anything is downloaded. Everything that isn't core listing data comes from small free sources, never the portal.
 
 **Runs unattended, fails loudly.** The daily job is a batch task the platform schedules; the code stays a simple wake-work-exit. Any failure surfaces visibly rather than silently producing nothing.
 
@@ -40,23 +40,23 @@ Each must-have is declared in plain language in the config, compiled into a chec
 
 Ordered so that the lightest work touches the most properties and the heaviest touches the fewest.
 
-**Step 1 — Build the catchment (free, local).**
-Compute, or reuse a cached, polygon of everywhere within the target commute time of the work anchor. It is both the geographic boundary of the search and a free local commute check. Most of the UK is excluded here at no cost.
+**Step 1 — Set the search area (free, local).**
+A straight-line radius around the home/work anchor is the coarse geographic filter. It is passed straight into the portal search; most of the UK is excluded here at no cost. (The real commute check is a per-property journey lookup in Step 3, not a precomputed polygon.)
 
-**Step 2 — Paid API property search (one feed, broad).**
-Search all properties inside the catchment using every constraint the paid API supports directly — price, bedrooms, bathrooms — and request every other useful field the API can return in the same results (floor area, EPC, tenure, type, coordinates, photos, agent details, and so on). This returns the candidate set already filtered on the cheap structured constraints, with most attributes populated from the single feed.
+**Step 2 — Scrape the portal (one broad search).**
+Query Rightmove's search API across the radius using every filter it supports — price, bedrooms, location — **paginating and price-band tiling** so we get *all* matches, not just the first capped page. Each result already carries price, beds, bathrooms, type, coordinates, address, listing URL and a thumbnail. Bathrooms has no server-side filter, so it is checked in code; a listing missing the value fails closed.
 
 **Step 3 — Fill gaps from other sources (light, across the candidates).**
-For fields the primary feed didn't provide, capture them from secondary API sources: fibre/internet availability, outdoor-space and park proximity, and similar — light field-reads and lookups, applied across the candidate set, each cached. Missing-and-unrecoverable fields are marked, to fail closed if their gate can't be met.
+For fields the portal search didn't provide, capture them from secondary sources: fibre/internet availability, outdoor-space/park proximity, and the **per-property commute** (a Google Routes door-to-door journey to the work anchor → minutes and number of transport modes) — light lookups across the candidate set, each cached. The commute journey, being the most expensive call, runs last, only on properties that have already passed the cheaper gates. Missing-and-unrecoverable fields are marked, to fail closed if their gate can't be met.
 
 **Step 4 — Populate area data for survivors (light).**
 For the surviving set, pull the relevant area-level data by area (e.g. crime statistics for the safety requirement) and populate it onto the properties. In v1 this is a straight data pull and threshold check — anywhere breaching the safety threshold fails — not a model judgement. Pulling by area and applying to each property in it keeps the work small.
 
-The properties passing every step are the day's matches. By construction the only paid breadth is the single API search; everything after is light lookups on a shrinking set.
+The properties passing every step are the day's matches. By construction the only broad fetch is the single portal search; everything after is light lookups on a shrinking set, with the costliest (the per-property commute journey) deliberately last.
 
 ## Versioning
 
-**v1 — the whole loop, deterministic only, page-delivered.** Catchment → paid API search → secondary-source gap-fill → area-data population, producing the daily sortable page. No shortlist comparison, no email, no favourites, no OCR, no model judgement anywhere. This is the complete, useful system on its own: it finds and presents the matches on a page the couple open when they want, and they judge condition and area feel with their own eyes, as they would anyway.
+**v1 — the whole loop, deterministic only, page-delivered.** Set the search area → scrape the portal → secondary-source gates (broadband, parks, commute) → area-data population, producing the daily sortable page. No shortlist comparison, no email, no favourites, no OCR, no model judgement anywhere. This is the complete, useful system on its own: it finds and presents the matches on a page the couple open when they want, and they judge condition and area feel with their own eyes, as they would anyway.
 
 **v2 — the additions, once v1 is solid.** None require reworking v1, thanks to the uniform-component structure:
 
@@ -70,9 +70,9 @@ The properties passing every step are the day's matches. By construction the onl
 
 ## Data strategy
 
-A paid property API is the spine, returning most attributes as single field-reads — price, beds, type, tenure, floor area, EPC, council tax, internet speed, sold-price comps, crime — and keeping the feed licensed rather than scraped. Gaps are filled from secondary sources. Known weaknesses are handled by the stated principles: coverage gaps fail closed, floor area is treated as "as advertised" rather than ground truth. In v1, fields that live only in the images (recovered by OCR) and qualitative judgements (condition, area feel) are out of scope and handled respectively by failing closed or by the couple's own eye; both become system capabilities in v2.
+Listings come from **scraping one portal (Rightmove) via its own search API** — price, beds, bathrooms, type, coordinates, address, listing URL, thumbnail — filtered at the source and paginated (with price-band tiling) for completeness. Everything else comes from small **free** sources: EPC + floor area, crime, parks/greenspace, broadband, sold-price comps, geocoding. Known weaknesses are handled by the stated principles: coverage gaps fail closed, floor area is treated as "as advertised" rather than ground truth. Using the portal's private endpoint is scraping, accepted deliberately for a personal tool; if its response shape ever changes, the daily job **fails loudly** rather than publishing a wrong page. In v1, fields that live only in the images (recovered by OCR) and qualitative judgements (condition, area feel) are out of scope and handled respectively by failing closed or by the couple's own eye; both become system capabilities in v2. See [Decision 0001](decisions/0001-data-providers.md) for the source choices and the pipeline shape.
 
-Three requirements are not property data and stay external regardless of spend: the commute (an isochrone/journey source, mostly absorbed into the catchment), area safety, and area feel.
+Three requirements are not portal data and stay external: the commute (a per-property journey lookup), area safety, and area feel.
 
 ## Delivery surfaces
 
@@ -100,14 +100,13 @@ Deferred, not designed out (the uniform-component structure leaves room without 
 
 ## Implementation tickets
 
-The v1 build is a setup ticket plus four feature tickets, ordered by dependency. Each has a clear goal and an explicit way to validate it. (The shortlist comparison is now a v2 capability — see below.)
+The v1 build is a setup ticket plus three feature tickets, ordered by dependency. Each has a clear goal and an explicit way to validate it. (The shortlist comparison is now a v2 capability — see below.)
 
-0. [Go project setup](tickets/00-project-setup-go.md) — the module, layout, toolchain, tests, lint, and CI the feature tickets build into.
-1. [Config & requirement compiler](tickets/01-config-and-requirement-compiler.md) — the single source of truth and the pass/fail gate engine.
-2. [Pluggable data-source framework](tickets/02-data-source-framework.md) — uniform components and cheap-to-expensive orchestration.
-3. [The finding pipeline](tickets/03-finding-pipeline.md) — catchment → paid search → gap-fill → area data, producing the daily matches.
-4. [Daily batch runner & static page](tickets/04-daily-batch-and-page.md) — unattended wake-work-exit and the sortable HTML page.
+- [Go project setup](tickets/00-project-setup-go.md) — the module, layout, toolchain, tests, lint, and CI the feature tickets build into.
+- [Config & requirement compiler](tickets/01-config-and-requirement-compiler.md) — the single source of truth and the pass/fail gate engine.
+- [The finding pipeline](tickets/03-finding-pipeline.md) — scrape Rightmove → gate on the free secondary sources and the per-property commute → the daily matches. A plain linear pipeline; the former separate data-source framework is folded in here.
+- [Daily batch runner & static page](tickets/04-daily-batch-and-page.md) — unattended wake-work-exit and the sortable HTML page.
 
 Deferred to v2:
 
-5. [Shortlist comparison](tickets/05-shortlist-comparison.md) — explainable weighted scoring over measurable criteria; fed by the v2 favourites layer, weights equal by default.
+- [Shortlist comparison](tickets/05-shortlist-comparison.md) — explainable weighted scoring over measurable criteria; fed by the v2 favourites layer, weights equal by default.

@@ -36,11 +36,11 @@ Concretely, deliver:
   passing or failing it.
 
 This ticket owns the *rules*, not the *data*: it produces rules that ask a data
-source for a field. Where that field comes from is Ticket 2's concern.
+source for a field. Where that field comes from is the pipeline's concern (Ticket 3).
 
 ## Out of scope
 
-- Fetching any real data (Tickets 2–3).
+- Fetching any real data (Ticket 3).
 - Any model judgement (v2).
 - Scoring or weighting — that is the shortlist stage (Ticket 5), which reads the
   same config but is a separate path.

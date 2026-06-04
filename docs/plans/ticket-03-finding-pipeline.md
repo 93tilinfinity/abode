@@ -1,139 +1,107 @@
 # Plan — Ticket 3: The finding pipeline
 
-Implementation plan for [Ticket 3](../tickets/03-finding-pipeline.md). It turns
-the abstract four steps into concrete Go `Source` components (on the [Ticket 2](ticket-02-data-source-framework.md)
-framework) bound to the providers chosen in [Decision 0001](../decisions/0001-data-providers.md),
-evaluating the [Ticket 1](ticket-01-config-and-compiler.md) rules to produce the
-day's matches.
+Implementation plan for [Ticket 3](../tickets/03-finding-pipeline.md). One linear
+Go pipeline that scrapes Rightmove, runs the [Ticket 1](ticket-01-config-and-compiler.md)
+gates cheapest-first, and emits the day's matches. Source choices and the
+"no framework" decision are in [Decision 0001](../decisions/0001-data-providers.md).
 
 ## 1. What this ticket owns
 
-The six real data sources and the order they run in (derived by the Ticket 2
-engine from their declared `Needs`/`Produces`/`Cost`). It does **not** own the
-framework, the rules, the page, or the shortlist.
+The scrape and the five gate steps, in a fixed hand-written order — **not** a
+plugin framework, the rules, the page, or the shortlist. Suggested layout under
+`internal/`:
 
-| Package (`internal/source/...`) | Provider | Produces | Cost class |
-|---|---|---|---|
-| `catchment` | postcodes.io (geocode) + arithmetic | anchor coords, in-radius flag | free-local |
-| `propertyapi` | PropertyData | price, beds, toilets?, type, coords, photo, agent, garden? | paid-broad |
-| `epc` | Open Data Communities EPC | floor area (m²), EPC rating | light-lookup (free) |
-| `broadband` | Ofcom postcode data / PropertyData `/internet-speed` | max download Mbps | light-lookup |
-| `greenspace` | OSM Overpass / OS Open Greenspace | nearest-park metres | light-lookup (free) |
-| `journey` | Google Routes (transit) | commute minutes, non-walking mode count | light-lookup (paid tier) |
-| `crime` | police.uk | violent/sexual-crime count within ~1 mi, last 12 mo | area-data (free) |
+| Package | Responsibility |
+|---|---|
+| `rightmove` | build the `/api/_search` URL, fetch, paginate, price-band tile, parse `properties[]` |
+| `pipeline` | run the gates in order over the candidate set, dropping failures early |
+| `broadband` | Ofcom postcode → max download Mbps |
+| `greenspace` | OSM Overpass / OS Open Greenspace → nearest-park metres |
+| `crime` | police.uk → violent/sexual count within ~1 mi, last 12 mo (per area) |
+| `journey` | Google Routes (transit) → minutes + non-walking mode count |
+| `epc` | Open Data Communities → floor area (m²) + EPC rating (page only, not a gate) |
+| `geocode` | postcodes.io → lat/long where needed |
 
-## 2. The pipeline, step by step
+These are just packages with ordinary functions; `pipeline` calls them in
+sequence. No `Source` interface, no ordering engine, no provenance generics.
 
-### Step 1 — Catchment = radius pre-filter (free, local)
-No isochrone. Geocode the work anchor (WC2A 1DD → lat/long via postcodes.io,
-once, cached in-run) and define a **30-mile** radius around it. This is just the
-search boundary handed to Step 2, plus a cheap point-in-radius sanity check. Most
-of the UK is excluded here at no cost.
+## 2. The scrape (step 1, the only broad fetch)
 
-### Step 2 — PropertyData search (paid, one broad call per run)
-One `/sourced-properties` call: anchor location, `radius=30` (miles),
-`standardised_type` = all residential types (no type gate in this couple's
-config), **`exclude_sstc=0`** (include under-offer / Sold-STC, per the decision),
-requesting as many results as the matching set needs. Then `/sourced-property`
-for full per-listing detail where the list rows are thin — used sparingly to
-conserve credits. Populate price, beds, toilets (if present), type, coords,
-photo, agent, and a garden/outdoor-space signal.
+- **Endpoint:** `https://www.rightmove.co.uk/api/_search` (JSON), `channel=BUY`.
+- **Server-side filters from config:** `locationIdentifier` (one home centre,
+  resolved once and stored in config), `radius` (miles), `minPrice`/`maxPrice`,
+  `minBedrooms`, `numberOfPropertiesPerPage` (page size), `index` (offset).
+- **Pagination:** loop `index` in page-size steps until the returned page is short
+  or the result total is reached.
+- **Beat the ~1,050 cap by price-band tiling:** when a single radius query's
+  `resultCount` would exceed the cap, split the price range into bands (e.g. £50k
+  steps between `minPrice` and `maxPrice`), fetch each band fully, and **merge,
+  de-duplicating by listing id**. This guarantees completeness.
+- **Parse** each `properties[]` entry → `{ id, price, bedrooms, bathrooms,
+  propertySubType, latitude, longitude, displayAddress, propertyUrl, thumbnail }`.
+- **Bathrooms in code:** Rightmove has no `minBathrooms` filter, so apply
+  `toilet_count ≥ 2` here. `bathrooms == null` → **fail closed** (matches config
+  `on_missing: fail`). Note in the page that "bathrooms" is Rightmove's count and
+  may differ from a strict toilet/cloakroom count (OCR recovery is v2).
+- **Be a polite client:** real browser `User-Agent`, low request rate, retry with
+  backoff; if the JSON shape changes, return an error → the run **fails loudly**.
 
-> **Strategy-list coverage is deferred to the free trial.** PropertyData has no
-> single "everything for sale" query — only ~39 investor-oriented lists. Before
-> locking the approach we'll prototype against the **500-credit trial**, measure
-> coverage of one or more broad lists against a known Rightmove search for the
-> area, and only then decide whether one broad list suffices or several must be
-> merged + de-duplicated. This is a planned validation task, not a guess.
+> **Validation task:** confirm the live `/api/_search` field names against one real
+> response **locally** (not from CI), and lock a small saved fixture for parser
+> tests. Do not hammer Rightmove from the shared CI runner.
 
-**Post-filter in code:** PropertyData has no native price/beds filter, so the
-`price ≤ £625k` and `bedrooms ≥ 2` gates are applied client-side immediately
-after this step — shrinking the set before any per-property lookup runs.
+## 3. The gates (steps 2–5, cheapest first)
 
-### Step 3 — Gap-fill (light, across the shrunk candidates)
-Ordered so the **free** pruning gates run before the costed journey lookup, so
-Google Routes only ever runs on properties that already passed everything else:
+Applied in code immediately after each field lands, so the set shrinks before the
+next (costlier) step:
 
-1. **`epc`** — match each listing to its EPC certificate (by address/postcode)
-   for **floor area (m²)** (page column + shortlist £/sqft) and EPC rating. *Not
-   a gate for this couple* — a missing EPC just leaves floor area blank; it never
-   fails a property.
-2. **`broadband`** — `fibre ≥ 300 Mbps` gate. Postcode-level availability/max
-   speed (Ofcom or PropertyData `/internet-speed`). Unknown → **fails closed**.
-3. **`greenspace`** — the park branch of `outdoor_space`. Because the rule is
-   *garden OR park ≤ 800 m*, this only needs to run when the garden signal from
-   Step 2 was false/unknown (short-circuit). Unknown both ways → fails closed.
-4. **`journey`** (Google Routes, last) — door-to-door transit, **depart Tuesday
-   08:00** → anchor. Read total minutes for `commute_time ≤ 50`, and count
-   distinct non-walking leg modes for `commute_modes ≤ 2`. Runs only on survivors
-   of all the above, minimising paid journeys.
+1. **price ≤ £625k, beds ≥ 2** — already filtered server-side in step 1; re-assert
+   in code as a guard.
+2. **toilets ≥ 2** — from the scraped `bathrooms` (step 1), fail closed if null.
+3. **broadband** — `max_download_mbps ≥ 300`, Ofcom postcode-level. Unknown →
+   fail closed. One lookup per unique postcode, reused.
+4. **outdoor_space** — `garden OR park ≤ 800 m`. Use the listing garden signal
+   first; only call `greenspace` when it's false/unknown (short-circuit the OR).
+5. **safe_area** — police.uk count within ~1 mi over 12 months (12 monthly
+   snapshots summed) vs the config threshold. Fetched **once per area**, reused
+   for nearby properties (in-run `map`). Absolute, tunable cutoff — **calibrate
+   against known areas** during the trial; the placeholder is a starting point.
+6. **commute_time ≤ 50 and commute_modes ≤ 2** — Google Routes door-to-door
+   transit, depart **Tue 08:00** → work anchor. **Runs last**, only on survivors,
+   minimising paid journeys. Read total minutes and count distinct non-walking leg
+   modes. Populate `commute_time` for the page column / v2 £-per-min sorting.
 
-### Step 4 — Area crime (light, on survivors)
-For each survivor, query **police.uk** for violent/sexual crimes within **~1 mile**
-of the property over the **last 12 months** (12 monthly snapshots, summed), and
-fail the `safe_area` gate if the count exceeds an **absolute, tunable threshold**
-(config `value`, placeholder 1200, calibrated in the trial). This is fully
-recomputed each run — no national distribution, no ONS population, no reference
-table — so it sits cleanly inside Ticket 2's "no cross-run cache" rule. Crime is
-fetched per area once and reused for nearby properties within the run.
+`epc` (floor area + rating) is pulled across survivors for the page / £/sqft and
+is **not** a gate — a missing EPC leaves floor area blank.
 
-> **Resolved (was a wrinkle).** The earlier LSOA national-percentile method
-> needed a national reference distribution that couldn't be rebuilt per run. The
-> chosen radius-count-with-absolute-threshold avoids that entirely. Trade-off:
-> the cutoff is an absolute number (not "worst 25% nationally"), so it isn't
-> population-adjusted and must be **calibrated against known good/bad areas during
-> the trial**; the placeholder is a starting point, not a tuned value.
+## 4. The matching set
 
-## 3. The matching set
+Properties passing every gate are the day's matches, emitted as records for
+Ticket 4 to render. Recovered fields carry a `source` string and are
+sanity-checked (out-of-range → not recovered). The only broad fetch is step 1;
+everything after is light lookups on a shrinking set, journey deliberately last.
 
-Properties passing every gate are the day's matches, emitted as records (with
-provenance flags from Ticket 2) for Ticket 4 to render. The only paid breadth is
-the single Step 2 search; everything after is light lookups on a shrinking set,
-with the paid Google journey deliberately last.
-
-## 4. Decisions captured during the interview
+## 5. Decisions captured
 
 | Decision | Choice | Consequence |
 |----------|--------|-------------|
-| Search radius | **30 miles / 48 km** | Covers fast-rail commuter towns; moderate fetch/journey volume. |
-| Availability | **Include under-offer / Sold-STC** (`exclude_sstc=0`) | Bigger candidate set → more EPC/broadband/greenspace lookups and **more Google journeys** (watch the free tier); page shows homes that may already be under offer. |
-| List coverage | **Decide in the free trial** | A measurement task precedes locking the list strategy. |
-| Safety measure | **Raw police.uk count within ~1 mi over 12 mo, absolute tunable threshold** | No reference data; recomputes each run. Not population-adjusted — cutoff must be calibrated in the trial. |
+| Listings source | **Scrape Rightmove `/api/_search`** (Decision 0001) | No paid provider; completeness via pagination + price-band tiling; fails loudly if the shape changes. |
+| Bathrooms | **Post-filter the returned field in code** | No server filter exists; null → fail closed. |
+| Search radius | **~40 miles around the home centre** | Covers fast-rail commuter towns; tune against journey volume. |
+| Availability | **Include under-offer / Sold-STC** | Bigger set → more journeys (watch the Routes free tier); page may show under-offer homes. |
+| Safety measure | **Raw police.uk count within ~1 mi over 12 mo, absolute tunable threshold** | Recomputes each run; not population-adjusted — calibrate in the trial. |
 
-## 5. Hand-offs
+## 6. Hand-offs
 
-- **Ticket 1** rules are evaluated by the framework as each field lands here.
-- **Ticket 2** provides ordering, the shrinking set, in-run caching, provenance,
-  spend logging, and fail-loudly.
-- **Ticket 4** renders the matches (floor area shown *as advertised*; provenance
-  markers subtle) and owns scheduling.
-- **Ticket 5** reuses `commute_minutes`, floor area + Land Registry comps for
+- **Ticket 1** rules are evaluated by the pipeline as each field lands.
+- **Ticket 4** renders the matches (floor area shown *as advertised*) and owns
+  scheduling; it leaves yesterday's page up if the run fails.
+- **Ticket 5 (v2)** reuses `commute_time`, floor area + Land Registry comps for
   £/sqft.
 
-## 6. Validation (acceptance for Ticket 3)
+## 7. Validation
 
-1. **Radius pre-filter.** A property > 30 mi from the anchor never reaches Step 2;
-   one just inside does. Anchor geocoded once per run.
-2. **One paid broad call.** Step 2 invokes PropertyData once per run for the
-   catchment, never per-property; `exclude_sstc=0` is sent; SSTC/under-offer
-   listings appear in results.
-3. **Client-side pre-filter.** `price ≤ £625k` and `beds ≥ 2` are applied right
-   after Step 2 and shrink the set before any per-property lookup.
-4. **Journey runs last and least.** Assert Google Routes is called only for
-   properties that passed price/beds/toilets/fibre/outdoor — never the whole
-   candidate set — and that it reads door-to-door minutes and counts non-walking
-   modes correctly (≤ 50, ≤ 2) for a known journey, departing Tue 08:00.
-5. **EPC is not a gate.** A property with no EPC match keeps blank floor area and
-   is **not** failed; one with an EPC exposes floor area in m².
-6. **Fibre fail-closed.** A postcode with unknown broadband fails the fibre gate.
-7. **Outdoor OR short-circuit.** A garden property passes without a greenspace
-   call; a garden-less one passes iff a park is ≤ 800 m; neither → fail closed.
-8. **Crime threshold.** Two locations either side of the configured count
-   threshold: the property near more crime fails `safe_area`, the other passes;
-   the 12-month window is summed correctly and crime is fetched once per area and
-   reused. Changing the threshold in config moves the line with no code edit.
-9. **Coverage trial.** A documented trial run measuring PropertyData list coverage
-   vs a reference Rightmove search, with the chosen list strategy recorded.
-10. **End-to-end.** With fixed mock providers and the example config, the pipeline
-    returns exactly the properties passing all gates; flipping a config threshold
-    changes the set as expected.
+See the acceptance checklist in [Ticket 3](../tickets/03-finding-pipeline.md):
+complete scrape (pagination + tiling), server-vs-code filters, shrink-early with
+journey last, fail-closed gates, the outdoor OR short-circuit, crime-by-area
+threshold, commute read, EPC-not-a-gate, and the end-to-end set.

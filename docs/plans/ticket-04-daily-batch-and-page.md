@@ -50,8 +50,8 @@ One static HTML file, regenerated each run, served at a stable public URL
   from the feed's `image_url`).
 - **Columns:** price, floor area, bedrooms, bathrooms, commute time, postcode,
   link out. **Floor area is labelled "as advertised"** (honest-about-what-it-
-  knows), and **recovered/heuristic values carry a subtle marker/tooltip**
-  (provenance, per Ticket 2).
+  knows), and **recovered/heuristic values carry a subtle marker/tooltip** (using
+  the `source` tag the pipeline records on recovered fields).
 - **Every column is clickable to sort** ascending/descending, client-side, with
   numeric columns sorted numerically. Implemented in **vanilla JS** (no
   framework) so the page is a single self-contained file.
@@ -61,13 +61,13 @@ One static HTML file, regenerated each run, served at a stable public URL
   today" page (this is success, not failure).
 
 > **Dependency note:** "newest listed first" needs a per-listing *listed date*
-> from PropertyData. Confirming that field is part of the Ticket 3 free-trial
-> check; if it's unavailable, the default falls back to commute-time ascending,
-> with listing date dropped from sorting.
+> from the Rightmove scrape (`addedOrReduced` / first-listed date). Confirming that
+> field is part of the Ticket 3 parser validation; if it's unavailable, the default
+> falls back to commute-time ascending, with listing date dropped from sorting.
 
 ## 5. Fail loudly (your decision: GitHub Actions email)
 
-- Any pipeline/source error (after Ticket 2's retries) → the binary exits
+- Any pipeline/source error (after the pipeline's bounded retries) → the binary exits
   non-zero → the workflow **fails** → **GitHub Actions sends its built-in failure
   email**. No extra alerting to build.
 - **The publish step only runs on success** (`if: success()`), so a failed run
@@ -88,8 +88,9 @@ One static HTML file, regenerated each run, served at a stable public URL
 
 ## 7. Hand-offs
 
-- **Ticket 3** supplies the matching set (with provenance flags) this renders.
-- **Ticket 2** supplies the fail-loudly exit semantics this relies on.
+- **Ticket 3** supplies the matching set (with `source` tags on recovered fields)
+  this renders, and the fail-loudly error this relies on (any source error aborts
+  the run non-zero after bounded retries).
 - **v2** adds the nudge email pointing at this page; the page stays the content.
 
 ## 8. Validation (acceptance for Ticket 4)
@@ -98,7 +99,7 @@ One static HTML file, regenerated each run, served at a stable public URL
    runs it, writes the HTML, exits 0, holds no process open.
 2. **Page contents.** A known matching set renders one row per property, each
    with a photo and all required columns; floor area shows an "as advertised"
-   label; a recovered value shows a subtle provenance marker.
+   label; a recovered value shows a subtle source marker.
 3. **Sortable + default.** Each column header sorts asc/desc (numeric columns
    numerically); the page loads in newest-listed-first order (or the documented
    fallback).

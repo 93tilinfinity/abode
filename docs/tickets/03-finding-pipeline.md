@@ -1,59 +1,57 @@
-# Ticket 3 — The finding pipeline (the four evaluation steps)
+# Ticket 3 — The finding pipeline (scrape → gate → matches)
 
-**Depends on:** Ticket 1 (rules) and Ticket 2 (source framework + ordering).
+**Depends on:** Ticket 1 (the compiled pass/fail rules).
 
-> **Worked plan:** [`plans/ticket-03-finding-pipeline.md`](../plans/ticket-03-finding-pipeline.md)
-> — the six concrete sources, provider bindings, and captured decisions (30-mile
-> radius, include SSTC, list coverage TBD in trial, LSOA per-capita safety).
->
-> **Provider choices:** see [Decision 0001 — Data providers](../decisions/0001-data-providers.md).
-> In short: **PropertyData** is the listings spine; **free OGL sources** supply
-> EPC+floor-area, crime and sold comps; commute is a **radius pre-filter + Google
-> Routes door-to-door** check rather than a computed isochrone (this refines
-> Step 1 below).
+> **Worked plan:** [`plans/ticket-03-finding-pipeline.md`](../plans/ticket-03-finding-pipeline.md).
+> **Source & shape choices:** [Decision 0001](../decisions/0001-data-providers.md).
+> In short: listings are **scraped from Rightmove's own search API** (paginated +
+> price-band tiled for completeness, bathrooms post-filtered in code); the rest of
+> the gates use **free** sources (broadband, parks, crime) and a per-property
+> **Google Routes** commute. It's one hand-written linear pipeline — there is no
+> separate source framework.
 
 ## Goal
 
-Implement the four real data sources of the v1 evaluation algorithm as uniform
-components on Ticket 2's framework, so that running the pipeline against the
-config's must-haves produces the day's matching set — every UK for-sale property
-that passes every deterministic gate. The cost ordering is inherited from the
-framework; this ticket supplies the actual sources in the order the principles
-demand: lightest work on the most properties, paid breadth exactly once.
+Implement the v1 finding pipeline: run the config's deterministic gates, cheapest
+first, over the scraped candidate set and emit the day's matching set — every UK
+for-sale property that passes every gate. Rendering and scheduling are Ticket 4.
 
-Deliver the four sources:
+## The pipeline (one linear sequence, each step shrinks the set)
 
-1. **Catchment builder (free, local).** Compute, or reuse a cached, polygon of
-   everywhere within the target commute time of the work anchor. It is both the
-   search boundary and the free commute check — most of the UK is excluded here
-   at no cost. Cache the polygon between runs.
-2. **Paid API property search (one feed, broad).** Search properties inside the
-   catchment using every constraint the paid API supports directly (price, beds,
-   baths) and request every other useful field in the same call (floor area, EPC,
-   tenure, type, coordinates, photos, agent). One paid breadth call; most
-   attributes populated from this single feed. (Commute time is **not** asked of
-   this feed — the listings API does not know the journey to the work anchor; it
-   comes from the journey source below.)
-3. **Secondary-source gap-fill (light, across candidates).** For fields the feed
-   didn't provide — fibre/internet availability, outdoor space / park proximity,
-   and similar — do light per-field lookups across the candidate set, each
-   cached. Recovered values are authoritative but flagged by source **and
-   sanity-checked** (a recovered value outside a plausible range is treated as
-   not recovered). Mark any field that stays missing-and-unrecoverable so its
-   gate fails closed. This step also includes a **per-property commute-time
-   lookup** against the journey/isochrone source: the catchment gate already
-   proved each candidate is inside the target time, but the page column and the
-   shortlist criterion need the actual minutes, so look them up here — one cached
-   call per candidate, light across the shrunk set — and populate `commute_time`
-   onto each property.
-4. **Area-data population for survivors (light).** For the surviving set, pull
-   area-level data **by area** (e.g. crime stats for the safety requirement) and
-   populate it onto each property in that area. v1 is a straight pull + threshold
-   check — breach the safety threshold and fail — **not** model judgement.
+1. **Scrape Rightmove (the one broad fetch).** Call `…/api/_search` across a fixed
+   home-centred **radius**, with `minPrice`/`maxPrice` and `minBedrooms` set from
+   config so price and beds are filtered server-side. **Paginate** (`index`) and,
+   where the ~1,050-result cap would truncate, **tile by price band** and merge,
+   de-duplicating by listing id, so the candidate set is *complete*. Each result
+   yields price, beds, **bathrooms**, type, coordinates, address, listing URL and
+   a thumbnail. Apply the **bathrooms** gate (`toilet_count ≥ 2`) in code; a
+   listing missing the value **fails closed**.
+2. **Broadband gate (free, per postcode).** `max_download_mbps ≥ 300` from Ofcom
+   postcode data. Unknown → **fails closed**. Fetched once per postcode, reused.
+3. **Outdoor-space gate (free).** `garden OR park ≤ 800 m`. Use the listing's
+   garden/outdoor signal first; only when it's false/unknown, look up nearest park
+   (OSM/OS). Unknown both ways → fails closed.
+4. **Crime gate (free, by area).** police.uk violent/sexual-crime count within
+   ~1 mile over the last 12 months vs the config threshold. Fetched **once per
+   area** and reused for nearby properties within the run.
+5. **Commute gate (Google Routes, last — the costliest step).** A door-to-door
+   transit journey to the work anchor (depart Tue 08:00): read total minutes
+   (`commute_time ≤ 50`) and count non-walking leg modes (`commute_modes ≤ 2`).
+   Runs only on properties that survived steps 1–4, so paid journeys are minimal.
+   The minutes are also kept for the page column (and the v2 shortlist).
 
-The output is the day's matches: properties passing every step's gates. This
-ticket produces the matching **set** (a list of property records); rendering and
-scheduling are Ticket 4.
+Floor area + EPC rating (free, Open Data Communities) are pulled across survivors
+for the page column / £/sqft — **not a gate**: a missing EPC just leaves floor
+area blank, never fails a property.
+
+A field that no source can supply is marked unrecoverable and its gate fails
+closed (Ticket 1 semantics). A value recovered from a secondary source is treated
+as authoritative but tagged with its `source` and **sanity-checked** (out-of-range
+→ treated as not recovered).
+
+The output is the day's matches: the records passing every gate, handed to
+Ticket 4. The only broad fetch is step 1; everything after is light lookups on a
+shrinking set.
 
 ## Out of scope
 
@@ -63,32 +61,31 @@ scheduling are Ticket 4.
 
 ## How to validate
 
-1. **Step order & cost shape.** Run the pipeline and assert the realised order is
-   catchment → paid search → gap-fill → area data, that the paid search is the
-   only broad/paid call, and that each later step's input count is ≤ the previous
-   (the set only shrinks).
-2. **Catchment as a gate.** Place a property outside the polygon and assert it
-   never reaches the paid search; place one just inside and assert it does. Assert
-   a second run reuses the cached polygon.
-3. **Single paid call.** Assert the paid source is invoked once per run for the
-   catchment, not per property, and that it returns the requested extra fields.
-4. **Gap-fill & fail-closed.** Mock the feed to omit fibre; assert the secondary
-   source fills it where available, and that a property whose fibre stays
-   unrecoverable **fails** the fibre gate rather than passing.
-5. **Provenance.** Assert a gap-filled field records its secondary source and is
-   still treated as authoritative by the rule. Assert a recovered value outside a
-   plausible range is rejected (treated as not recovered) rather than used.
-6. **Per-property commute time.** Assert every candidate gets a `commute_time`
-   from the journey source (not the listings feed), that the lookup runs on the
-   post-catchment candidate set (not the whole field), and that the populated
-   minutes are consumed by the page column and shortlist criterion.
-7. **Area threshold, not judgement.** Give two areas crime data either side of
-   the safety threshold; assert every property in the breaching area fails and
-   none in the safe area fails on that gate, with no model involved.
-8. **End-to-end set.** With a fixed mock dataset and a fixed config, assert the
-   pipeline returns exactly the properties that pass all gates — and that flipping
-   one config threshold changes the matching set as expected (ties back to
-   Ticket 1).
+1. **Complete scrape.** Against a known Rightmove search for the area, assert the
+   pipeline's candidate count matches (pagination works) and that a query which
+   would exceed ~1,050 results is tiled by price band and de-duplicated rather
+   than truncated.
+2. **Server vs code filters.** Assert price and beds are sent as request params
+   (filtered server-side); assert bathrooms is filtered in code and that a listing
+   with a null bathrooms value **fails** the toilets gate rather than passing.
+3. **Shrink early, journey last.** Assert each later step's input count is ≤ the
+   previous, and that Google Routes is called only for properties that passed
+   price/beds/baths/broadband/outdoor/crime — never the whole candidate set.
+4. **Fail-closed gates.** A postcode with unknown broadband fails the fibre gate;
+   a garden-less property with no park ≤ 800 m fails outdoor-space.
+5. **Outdoor OR short-circuit.** A garden property passes without a park lookup; a
+   garden-less one passes iff a park is ≤ 800 m.
+6. **Crime threshold, by area.** Two areas either side of the configured count:
+   properties in the breaching area fail `safe_area`, the others pass; crime is
+   fetched once per area and reused; the 12-month window is summed correctly.
+   Changing the threshold in config moves the line with no code edit.
+7. **Commute read.** For a known journey departing Tue 08:00, assert minutes (≤ 50)
+   and non-walking mode count (≤ 2) are read correctly and populated for the page.
+8. **EPC is not a gate.** A property with no EPC match keeps blank floor area and
+   is **not** failed; one with an EPC exposes floor area in m².
+9. **End-to-end.** With fixed mock sources and the example config, the pipeline
+   returns exactly the properties passing all gates; flipping a config threshold
+   changes the set as expected (ties back to Ticket 1).
 
 ## Hygiene gate (before committing)
 

@@ -32,8 +32,8 @@ Go fits Abode's principles well:
 - **"Fails loudly."** Errors in Go are ordinary values you must handle, not
   exceptions you can forget. This nudges you toward surfacing failures instead
   of swallowing them.
-- **"Uniform pluggable parts."** Go interfaces are perfect for the data-source
-  contract in Ticket 2: each source satisfies one small interface.
+- **Small, composable packages.** Each data lookup is an ordinary package the
+  pipeline calls in a fixed order (Ticket 3) — simple to read and to test.
 - **Concurrency** (for the per-property lookups in Ticket 3) is built into the
   language (`goroutines`, `context`), without extra libraries.
 
@@ -72,19 +72,21 @@ abode/
 │   └── abode-shortlist/        # the on-demand shortlist tool (Ticket 5)
 │       └── main.go
 └── internal/
-    ├── config/                 # load + validate abode.config.yaml      (Ticket 1)
-    ├── requirement/            # compile must-haves → pass/fail rules    (Ticket 1)
-    ├── source/                 # the pluggable data-source framework     (Ticket 2)
-    │   ├── catchment/          # commute isochrone polygon               (Ticket 3)
-    │   ├── propertyapi/        # paid property feed                      (Ticket 3)
-    │   ├── broadband/          # fibre / Mbps lookup                     (Ticket 3)
-    │   ├── greenspace/         # nearest-park distance                   (Ticket 3)
-    │   ├── journey/            # per-property commute time + modes       (Ticket 3)
-    │   └── crime/              # area crime data                         (Ticket 3)
-    ├── pipeline/               # orders + runs the sources               (Ticket 3)
-    ├── web/                    # render the static sortable page         (Ticket 4)
-    └── shortlist/              # weighted explainable scoring            (Ticket 5)
+    ├── config/        # load + validate abode.config.yaml          (Ticket 1)
+    ├── requirement/   # compile must-haves → pass/fail rules        (Ticket 1)
+    ├── rightmove/     # scrape the search API (paginate + tile)     (Ticket 3)
+    ├── broadband/     # fibre / Mbps lookup (Ofcom)                 (Ticket 3)
+    ├── greenspace/    # nearest-park distance                       (Ticket 3)
+    ├── crime/         # area crime data (police.uk)                 (Ticket 3)
+    ├── journey/       # per-property commute time + modes (Routes)  (Ticket 3)
+    ├── epc/           # floor area + EPC rating (page column only)  (Ticket 3)
+    ├── pipeline/      # runs the gates in order over the set        (Ticket 3)
+    ├── web/           # render the static sortable page             (Ticket 4)
+    └── shortlist/     # weighted explainable scoring          (Ticket 5, v2)
 ```
+
+Each `internal/` data package is just ordinary functions the `pipeline` calls in
+sequence — there is no source-framework or plugin registry (see Decision 0001).
 
 A note on conventions you'll see referenced online: avoid `pkg/` (an older
 fashion that adds a directory for no benefit on a project like this), and don't
@@ -143,8 +145,8 @@ you don't, keeping `go.mod`/`go.sum` honest. Commit both files.
 3. **Keep `main` thin; put logic in packages.** `func main()` wires things and
    calls `internal/...`. Packages are unit-testable; `main` is not.
 4. **Accept interfaces, return structs.** Functions take small interfaces (easy
-   to fake in tests) and return concrete types. This is the backbone of the
-   Ticket 2 source framework.
+   to fake in tests — e.g. an HTTP client) and return concrete types, so the
+   pipeline's lookups stay testable without hitting the network.
 5. **Pass `context.Context` as the first argument** to anything doing I/O, so
    network calls can time out and cancel: `func Fetch(ctx context.Context, ...)`.
 6. **Doc comments** start with the name being documented and are full sentences:
@@ -274,8 +276,8 @@ already-public listing data.
 ## Future fit: OCR and model calls in Go (your question)
 
 Short answer: **yes, both the v2 OCR and the v2 model-judgement steps are fine
-in Go** — and the cleanest way keeps them as ordinary Ticket 2 data sources that
-make HTTP calls, with no special language support needed.
+in Go** — and the cleanest way keeps them as ordinary pipeline lookups (Ticket 3)
+that make HTTP calls, with no special language support needed.
 
 - **OCR (v2 — recover bathroom count / square footage from floor plans).** Two
   routes:
@@ -293,7 +295,7 @@ make HTTP calls, with no special language support needed.
 
 So the v2 roadmap doesn't constrain the language choice: prefer **calling hosted
 APIs over HTTP** for both OCR and model work, which keeps them consistent with
-the "uniform pluggable source" design and avoids CGo. The only time Go gets
+the rest of the pipeline's lookups and avoids CGo. The only time Go gets
 fiddly is if you insist on running OCR *in-process* via Tesseract/CGo — and you
 don't have to.
 

@@ -71,7 +71,7 @@ requirements:
     source: journey
     op: "<="
     value: 50
-    params:                 # the catchment (boundary) is built from this requirement
+    params:                 # search radius is centred on work_anchor; this gate is the per-property commute check
       to: work_anchor
       day: tuesday
       depart: "08:00"
