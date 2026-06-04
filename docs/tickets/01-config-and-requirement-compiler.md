@@ -2,6 +2,10 @@
 
 **Depends on:** nothing. This is the foundation every other ticket reads from.
 
+> **Worked plan:** [`plans/ticket-01-config-and-compiler.md`](../plans/ticket-01-config-and-compiler.md)
+> — built against the couple's real must-haves, with a sample config at
+> [`examples/abode-config.example.yaml`](../examples/abode-config.example.yaml).
+
 ## Goal
 
 Make the config file the single source of truth for the couple's must-haves and
