@@ -1,0 +1,125 @@
+# Abode — configuration (worked example)
+#
+# This is THE single source of truth for the daily search. Changing what you
+# want means editing this file, not the code. Every "requirement" below is a
+# gate: a property passes ALL of them or it is never shown.
+#
+# kind:
+#   deterministic — a hard check against real data (v1).
+#   judgement     — needs a model to form a view (v2). Recorded here so it isn't
+#                   forgotten, but NOT gating in v1; you judge it by eye.
+#
+# on_missing: fail  — if the field can't be obtained, the gate fails closed
+#                     (never satisfied-by-assumption).
+
+version: 1
+
+# ── Commute destination ──────────────────────────────────────────────────────
+work_anchor:
+  label: "39 Essex Chambers"
+  address: "81 Chancery Lane, London"
+  postcode: "WC2A 1DD"
+
+# Journey planners need a concrete departure to measure against.
+commute_window:
+  day: tuesday
+  depart: "08:00"
+
+# Your real budget — recorded for reference and shown in reporting. The price
+# gate is set a little higher (below) because asking prices negotiate down.
+budget_reference_gbp: 575000
+
+# ── The must-haves ───────────────────────────────────────────────────────────
+requirements:
+
+  - id: price
+    description: "Under budget so we don't sink all our savings and can still afford repayments"
+    kind: deterministic
+    field: price_gbp
+    source: property_api
+    op: "<="
+    value: 625000          # search ceiling; true budget is budget_reference_gbp
+    notes: "Ceiling above the £575k budget to catch listings that may negotiate down."
+
+  - id: bedrooms
+    description: "At least 2 bedrooms so guests can stay and we can WFH"
+    kind: deterministic
+    field: bedrooms
+    source: property_api
+    op: ">="
+    value: 2
+
+  - id: toilets
+    description: "2 toilets so we aren't waiting"
+    kind: deterministic
+    field: toilet_count     # a separate WC / downstairs cloakroom counts toward the 2
+    source: property_api
+    op: ">="
+    value: 2
+    on_missing: fail        # v1 fails closed; floor-plan (OCR) recovery is a v2 capability
+
+  - id: condition
+    description: "Great condition now so we don't need to do work to live comfortably"
+    kind: judgement         # no clean dataset — v2 model judgement
+    defer_to: v2
+    v1_handling: "Judged by eye on the listing photos; not gating in v1."
+
+  - id: commute_time
+    description: "Within 50 minutes of work for a low-stress commute"
+    kind: deterministic
+    field: commute_minutes
+    source: journey
+    op: "<="
+    value: 50
+    params:                 # search radius is centred on work_anchor; this gate is the per-property commute check
+      to: work_anchor
+      day: tuesday
+      depart: "08:00"
+
+  - id: commute_modes
+    description: "At most 2 transport modes to reduce stress"
+    kind: deterministic
+    field: commute_modes_excluding_walk   # walking to/from stops does not count
+    source: journey
+    op: "<="
+    value: 2
+
+  - id: interesting_area
+    description: "Interesting area so we can engage with the community and have fun"
+    kind: judgement         # no clean dataset — v2 model judgement
+    defer_to: v2
+    v1_handling: "Judged by eye; not gating in v1."
+
+  - id: safe_area
+    description: "Safe area so my partner isn't in danger walking home late at night"
+    kind: deterministic
+    field: violent_sexual_crime_1mi_12mo   # raw police.uk count within ~1 mile, last 12 months
+    source: crime
+    op: "<="
+    value: 1200             # PLACEHOLDER cutoff — calibrate against known areas during the trial
+    on_missing: fail
+    notes: "Absolute, tunable cutoff; lower is safer. Recomputed each run (no national ranking)."
+
+  - id: outdoor_space
+    description: "Garden or next to a park for peace of mind while WFH"
+    kind: deterministic
+    source: composite
+    on_missing: fail
+    any_of:                 # OR — passes if EITHER branch passes
+      - field: has_private_outdoor_space    # garden, yard, terrace or patio
+        source: property_api
+        op: "=="
+        value: true
+      - field: nearest_park_metres
+        source: greenspace
+        op: "<="
+        value: 800          # a park within ~10 min walk
+
+  - id: fibre
+    description: "Fast internet so we can both work from home"
+    kind: deterministic
+    field: max_download_mbps
+    source: broadband
+    op: ">="
+    value: 300
+    on_missing: fail
