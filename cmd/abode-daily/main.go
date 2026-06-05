@@ -15,7 +15,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/93tilinfinity/abode/internal/page"
+	"github.com/93tilinfinity/abode/internal/web"
 )
 
 func main() {
@@ -44,7 +44,7 @@ func run(logger *slog.Logger) error {
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return fmt.Errorf("creating output dir %q: %w", outDir, err)
 	}
-	html := page.RenderHeartbeat(page.Heartbeat{
+	html := web.RenderHeartbeat(web.Heartbeat{
 		GeneratedAt: start,
 		MatchCount:  matches,
 		Note:        "Infrastructure heartbeat — feature tickets will replace this with the real listings page.",

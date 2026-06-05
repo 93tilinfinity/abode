@@ -7,4 +7,4 @@ fmt:   ; gofmt -l -w .
 vet:   ; go vet ./...
 lint:  ; golangci-lint run
 run:   ; go run ./cmd/abode-daily
-check: fmt vet build test
+check: fmt vet lint build test

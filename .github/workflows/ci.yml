@@ -21,6 +21,10 @@ jobs:
           fi
       - name: vet
         run: go vet ./...
+      - name: lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v2.5.0
       - name: build
         run: go build ./...
       - name: test

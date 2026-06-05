@@ -1,8 +1,8 @@
-// Package page renders Abode's static HTML page.
+// Package web renders Abode's static HTML page.
 //
 // Today it renders only an infrastructure heartbeat; Ticket 4 extends it to
 // render the sortable table of matching properties.
-package page
+package web
 
 import (
 	"fmt"

@@ -8,16 +8,16 @@ for the full system spec and [`docs/tickets/`](docs/tickets/) for the build plan
 **Ticket 0 (infrastructure) is built.** The overnight loop runs end to end as a
 *heartbeat*: a scheduled GitHub Actions workflow runs the Go batch nightly, which
 writes a static page and publishes it to GitHub Pages. The page currently just
-confirms the run happened. Feature tickets 1–5 fill this skeleton with the real
-product (config-driven gates, the data pipeline, the listings page, the shortlist
-scorer) without changing this shape.
+confirms the run happened. The feature tickets fill this skeleton with the real
+product (config-driven gates, the finding pipeline, the listings page, the
+shortlist scorer) without changing this shape.
 
 ## Run it locally
 
 ```sh
 go run ./cmd/abode-daily      # writes ./public/index.html
 open public/index.html        # (or just open the file)
-make check                    # gofmt + vet + build + test
+make check                    # gofmt + vet + lint + build + test
 ```
 
 ## Layout
@@ -25,7 +25,7 @@ make check                    # gofmt + vet + build + test
 ```
 cmd/abode-daily/       # the daily batch entrypoint (Ticket 4)
 cmd/abode-shortlist/   # the shortlist tool (Ticket 5, stub)
-internal/page/         # static page rendering (Ticket 4)
+internal/web/          # static page rendering (Ticket 4)
 docs/                  # spec, tickets, plans, decisions
 ```
 
@@ -34,7 +34,8 @@ for the full intended package layout the feature tickets grow into.)
 
 ## Continuous integration
 
-- **`ci`** runs on every push/PR: `gofmt` check, `go vet`, `go build`, `go test`.
+- **`ci`** runs on every push/PR: `gofmt` check, `go vet`, `golangci-lint`,
+  `go build`, `go test`.
 - **`daily`** runs on a cron schedule (and on demand via *Run workflow*): runs the
   batch and deploys the page to Pages. A failed run exits non-zero, skips the
   deploy (so yesterday's page stays up), and triggers GitHub's failure email.
@@ -48,6 +49,7 @@ for the full intended package layout the feature tickets grow into.)
 The repo is **public**, so GitHub Pages is available on the Free plan; the page
 only ever shows already-public listing data.
 
-Future feature tickets will add API credentials as **Actions secrets**
-(`PROPERTYDATA_KEY`, `GOOGLE_ROUTES_KEY`, `EPC_API_KEY`); none are needed for the
-heartbeat.
+Future feature tickets will add credentials as **Actions secrets** —
+`GOOGLE_ROUTES_KEY` (commute) and a free email-registered `EPC_API_KEY` (floor
+area). The Rightmove listings source is scraped via its own search API and needs
+no key. None are needed for the heartbeat.
