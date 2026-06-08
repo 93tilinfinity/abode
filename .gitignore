@@ -1,0 +1,7 @@
+# Build output / generated site
+/public/
+/abode-daily
+/abode-shortlist
+
+# Test / coverage artifacts
+*.out

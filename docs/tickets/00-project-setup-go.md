@@ -63,9 +63,9 @@ functions the `pipeline` calls in order — no plugin framework (Decision 0001).
 ## Tooling & CI
 
 - `gofmt`, `go vet ./...`, `golangci-lint` (govet, staticcheck, errcheck,
-  ineffassign, gofmt).
+  ineffassign, unused; gofmt is enforced separately as its own CI step).
 - `Makefile` targets `build`/`test`/`fmt`/`vet`/`lint`, plus `check` = fmt + vet +
-  lint + test (run before every commit).
+  lint + build + test (run before every commit).
 - `.github/workflows/ci.yml` on push/PR: build, test, vet, lint, and fail if
   `gofmt -l .` reports any file.
 
