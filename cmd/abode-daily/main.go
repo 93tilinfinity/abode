@@ -9,10 +9,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/93tilinfinity/abode/internal/web"
@@ -20,7 +23,14 @@ import (
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	if err := run(logger); err != nil {
+
+	// The batch responds to cancellation so it can be stopped cleanly when run
+	// unattended. Feature tickets thread this context into their I/O lookups
+	// (the listings/commute/crime/... sources) for per-call timeouts.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	if err := run(ctx, logger); err != nil {
 		// Fail loudly: a non-zero exit fails the scheduled workflow, which leaves
 		// yesterday's published page intact and triggers the failure email.
 		logger.Error("daily run failed", "err", err)
@@ -28,16 +38,20 @@ func main() {
 	}
 }
 
-// run is wake -> work -> write -> exit. It returns an error rather than calling
-// os.Exit so it stays unit-testable.
-func run(logger *slog.Logger) error {
+// run is wake -> work -> write -> exit. It takes a context so the work can be
+// timed out or cancelled, and returns an error rather than calling os.Exit so it
+// stays unit-testable.
+func run(ctx context.Context, logger *slog.Logger) error {
 	start := time.Now().UTC()
 	logger.Info("abode daily run starting", "at", start.Format(time.RFC3339))
 
 	// --- work (placeholder) --------------------------------------------------
 	// Ticket 3 replaces this with the real finding pipeline; for now it is a
 	// heartbeat so we can assert the infrastructure runs unattended.
-	matches := runPlaceholderWork(logger)
+	matches, err := runPlaceholderWork(ctx, logger)
+	if err != nil {
+		return fmt.Errorf("running work: %w", err)
+	}
 
 	// --- write the page ------------------------------------------------------
 	outDir := envOr("ABODE_OUTPUT_DIR", "public")
@@ -62,10 +76,15 @@ func run(logger *slog.Logger) error {
 	return nil
 }
 
-// runPlaceholderWork stands in for the finding pipeline until Ticket 3.
-func runPlaceholderWork(logger *slog.Logger) int {
+// runPlaceholderWork stands in for the finding pipeline until Ticket 3. It takes
+// a context and returns (matches, error) to model the shape the real pipeline
+// will have — its data sources do network I/O that can fail or be cancelled.
+func runPlaceholderWork(ctx context.Context, logger *slog.Logger) (int, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
 	logger.Info("placeholder work: no real data sources wired yet")
-	return 0
+	return 0, nil
 }
 
 func envOr(key, fallback string) string {
